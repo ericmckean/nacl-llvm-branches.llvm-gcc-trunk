@@ -1,3 +1,393 @@
+@LOCALMOD_START - NativeClient SFI macros
+  .macro sfi_long_based_on_pos p0 p1 p2 p3 val
+	.set pos, (. - XmagicX) % 16
+	.fill  (((\p3<<12)|(\p2<<8)|(\p1<<4)|\p0)>>pos) & 15, 4, \val
+	.endm
+
+
+  .macro sfi_new_bundle
+  .align 4
+  .endm
+
+	.macro sfi_illegal_if_at_bundle_begining
+	sfi_long_based_on_pos 1 0 0 0 0xe1277777
+	.endm
+
+
+	.macro sfi_nop_if_at_bundle_end
+	sfi_long_based_on_pos 0 0 0 1 0xe1a00000
+	.endm
+
+
+	.macro sfi_nops_to_force_slot3
+	sfi_long_based_on_pos 3 2 1 0 0xe1a00000
+	.endm
+
+
+	.macro sfi_nops_to_force_slot2
+	sfi_long_based_on_pos 2 1 0 3 0xe1a00000
+	.endm
+
+
+	.macro sfi_nops_to_force_slot1
+	sfi_long_based_on_pos 1 0 3 2 0xe1a00000
+	.endm
+
+
+ @ ========================================
+	.macro sfi_data_mask reg cond
+	bic\cond \reg, \reg, #0xc0000000
+	.endm
+
+
+	.macro sfi_code_mask reg cond=
+	bic\cond \reg, \reg, #0xf000000f
+	.endm
+
+
+ @ ========================================
+	.macro sfi_call_preamble
+	sfi_nops_to_force_slot3
+	.endm
+
+
+	.macro sfi_return_alignment_and_code_mask reg cond=
+	sfi_nop_if_at_bundle_end
+	sfi_code_mask \reg \cond
+	.endm
+
+
+ @ ========================================
+	.macro sfi_store_preamble reg cond
+	.if \reg != sp
+	sfi_nop_if_at_bundle_end
+	sfi_data_mask \reg, \cond
+	.endif
+	.endm
+
+
+ @ ========================================
+	.macro sfi_add rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	add \rega, \regb, \imm, \rot
+	sfi_data_mask \rega
+	.endm
+
+
+	.macro sfi_addeq rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	addeq \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, eq
+	.endm
+
+
+	.macro sfi_addne rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	addne \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, ne
+	.endm
+
+
+	.macro sfi_addlt rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	addlt \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, lt
+	.endm
+
+
+	.macro sfi_addle rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	addle \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, le
+	.endm
+
+
+	.macro sfi_addls rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	addls \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, ls
+	.endm
+
+
+	.macro sfi_addge rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	addge \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, ge
+	.endm
+
+
+	.macro sfi_addgt rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	addgt \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, gt
+	.endm
+
+
+	.macro sfi_addhs rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	addhs \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, hs
+	.endm
+
+
+	.macro sfi_addhi rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	addhi \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, hi
+	.endm
+
+
+	.macro sfi_addlo rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	addlo \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, lo
+	.endm
+
+
+ @ ========================================
+	.macro sfi_sub rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	sub \rega, \regb, \imm, \rot
+	sfi_data_mask \rega
+	.endm
+
+
+	.macro sfi_subeq rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	subeq \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, eq
+	.endm
+
+
+	.macro sfi_subne rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	subne \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, ne
+	.endm
+
+
+	.macro sfi_sublt rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	sublt \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, lt
+	.endm
+
+
+	.macro sfi_suble rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	suble \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, le
+	.endm
+
+
+	.macro sfi_subls rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	subls \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, ls
+	.endm
+
+
+	.macro sfi_subge rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	subge \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, ge
+	.endm
+
+
+	.macro sfi_subgt rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	subgt \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, gt
+	.endm
+
+
+	.macro sfi_subhs rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	subhs \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, hs
+	.endm
+
+
+	.macro sfi_subhi rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	subhi \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, hi
+	.endm
+
+
+	.macro sfi_sublo rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	sublo \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, lo
+	.endm
+
+
+ @ ========================================
+	.macro sfi_mov rega regb
+	sfi_nop_if_at_bundle_end
+	mov \rega, \regb
+	sfi_data_mask \rega
+	.endm
+
+
+	.macro mov_subeq rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	moveq \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, eq
+	.endm
+
+
+	.macro mov_subne rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	movne \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, ne
+	.endm
+
+
+	.macro mov_sublt rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	movlt \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, lt
+	.endm
+
+
+	.macro mov_suble rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	movle \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, le
+	.endm
+
+
+	.macro mov_subls rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	movls \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, ls
+	.endm
+
+
+	.macro mov_subge rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	movge \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, ge
+	.endm
+
+
+	.macro mov_subgt rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	movgt \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, gt
+	.endm
+
+
+	.macro mov_subhs rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	movhs \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, hs
+	.endm
+
+
+	.macro mov_subhi rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	movhi \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, hi
+	.endm
+
+
+	.macro mov_sublo rega regb imm rot=0
+	sfi_nop_if_at_bundle_end
+	movlo \rega, \regb, \imm, \rot
+	sfi_data_mask \rega, lo
+	.endm
+
+
+ @ ========================================
+	.macro sfi_bx link
+	sfi_return_alignment_and_code_mask \link
+	bx \link
+	.endm
+
+
+	.macro sfi_bxeq link
+	sfi_return_alignment_and_code_mask \link eq
+	bxeq \link
+	.endm
+
+
+	.macro sfi_bxne link
+	sfi_return_alignment_and_code_mask \link ne
+	bxne \link
+	.endm
+
+
+	.macro sfi_bxlt link
+	sfi_return_alignment_and_code_mask \link lt
+	bxlt \link
+	.endm
+
+
+	.macro sfi_bxle link
+	sfi_return_alignment_and_code_mask \link le
+	bxle \link
+	.endm
+
+
+	.macro sfi_bxls link
+	sfi_return_alignment_and_code_mask \link ls
+	bxls \link
+	.endm
+
+
+	.macro sfi_bxge link
+	sfi_return_alignment_and_code_mask \link ge
+	bxge \link
+	.endm
+
+
+	.macro sfi_bxgt link
+	sfi_return_alignment_and_code_mask \link gt
+	bxgt \link
+	.endm
+
+
+	.macro sfi_bxhs link
+	sfi_return_alignment_and_code_mask \link hs
+	bxhs \link
+	.endm
+
+
+	.macro sfi_bxhi link
+	sfi_return_alignment_and_code_mask \link hi
+	bxhi \link
+	.endm
+
+
+	.macro sfi_bxlo link
+	sfi_return_alignment_and_code_mask \link lo
+	bxlo \link
+	.endm
+
+	.macro sfi_bxcc link
+	sfi_return_alignment_and_code_mask \link lo
+	bxcc \link
+	.endm
+
+
+ @ ========================================
+	.macro sfi_indirect_jump_preamble link
+	sfi_nop_if_at_bundle_end
+	sfi_code_mask \link
+	.endm
+
+
+	.macro sfi_indirect_call_preamble link
+	sfi_nops_to_force_slot2
+	sfi_code_mask \link
+  .endm
+@LOCALMOD_END
+
+.align 4
+XmagicX:
+
 @ libgcc routines for ARM cpu.
 @ Division routines, written by Richard Earnshaw, (rearnsha@armltd.co.uk)
 
@@ -97,8 +487,8 @@ Boston, MA 02110-1301, USA.  */
 
 #if (__ARM_ARCH__ > 4) || defined(__ARM_ARCH_4T__)
 
-# define RET		bx	lr
-# define RETc(x)	bx##x	lr
+# define RET		sfi_bx	lr
+# define RETc(x)	sfi_bx##x	lr
 
 /* Special precautions for interworking on armv4t.  */
 # if (__ARM_ARCH__ == 4)
@@ -116,7 +506,7 @@ Boston, MA 02110-1301, USA.  */
 #endif /* __ARM_ARCH == 4 */
 
 #else
-
+/* LOCALMOD we do not support ARCH 4 in NaCl, no changes here. */
 # define RET		mov	pc, lr
 # define RETc(x)	mov##x	pc, lr
 
@@ -210,22 +600,28 @@ LSYM(Lend_fde):
 	bx	lr
 #else
 #define RETLDM \
-	ldr     pc, [sp], #8
+	ldr     lr, [sp], #8
+  sfi_bx  lr
 /* APPLE LOCAL begin v7 support. Merge from mainline */
 #if defined (__thumb2__)
 #define RETLDM1(...) \
-	pop   {__VA_ARGS__, pc}
+	pop   {__VA_ARGS__, lr}
+  sfi_bx lr
 #define RETLDM2(cond,...) \
-	pop##cond   {__VA_ARGS__, pc}
+	pop##cond   {__VA_ARGS__, lr}
+  sfi_bx lr
 #else
 #define RETLDM1(...) \
-	ldmia   sp!, {__VA_ARGS__, pc}
+	ldmia   sp!, {__VA_ARGS__, lr}
+  sfi_bx lr
 #define RETLDM2(cond,...) \
-	ldm##cond##ia   sp!, {__VA_ARGS__, pc}
+	ldm##cond##ia   sp!, {__VA_ARGS__, lr}
+  sfi_bx lr
 #endif
 /* APPLE LOCAL end v7 support. Merge from mainline */
 #define RETLDM_unwind(addr) \
-	ldr	pc, [sp], #8
+	ldr	lr, [sp], #8
+  sfi_bx lr
 #endif
 
 /* APPLE LOCAL begin v7 support. Merge from mainline */
@@ -292,6 +688,7 @@ LSYM(Lend_fde):
 #if !defined(__MACH__)
 98:	cfi_push 98b - __\name, 0xe, -0x8, 0x8
 #endif
+  sfi_call_preamble
 	bl	SYM (__div0) __PLT__
 	mov	r0, #0			@ About as wrong as it could be.
 	RETLDM_unwind (8b)
@@ -303,13 +700,15 @@ LSYM(Lend_fde):
 #if !defined(__MACH__)
 7:	cfi_push 7b - __\name, 0xe, -0x4, 0x8
 #endif
+  sfi_call_preamble
 	bl	SYM (__div0)
 	mov	r0, #0			@ About as wrong as it could be.
 #if defined (__INTERWORKING__)
 	pop	{ r1, r2 }
 	bx	r2
 #else
-	pop	{ r1, pc }
+	pop	{ r1, lr }
+  sfi_bx lr
 #endif
 .endm
 
@@ -372,7 +771,7 @@ SYM (\name):
 #define THUMB_FUNC
 #define THUMB_CODE
 /* APPLE LOCAL ARM function alignment */
-#define FUNC_ALIGN .align 2
+#define FUNC_ALIGN .align 4
 /* APPLE LOCAL v7 support. Merge from mainline */
 #define THUMB_SYNTAX
 #endif
@@ -391,7 +790,7 @@ SYM (__$0):
 	.text
 	.globl SYM (__\name)
 	TYPE (__\name)
-	.align 0
+	.align 4
 	THUMB_CODE
 	THUMB_FUNC
 SYM (__\name):
@@ -418,6 +817,7 @@ SYM (__\name):
 #if defined(__MACH__)
   bl ___$0
 #else
+  sfi_call_preamble
   bl  ___\name
 #endif
 .endm
@@ -471,7 +871,7 @@ SYM (__$0):
 	.text
 	.globl SYM (__\name)
 	TYPE (__\name)
-	.align 0
+	.align 4
 	.arm
 SYM (__\name):
 #endif
@@ -481,6 +881,7 @@ SYM (__\name):
 #if defined(__MACH__)
 	bl	SYM (__$0)
 #else
+  sfi_call_preamble
 	bl	__\name
 #endif
 .endm
@@ -534,16 +935,18 @@ pc		.req	r15
 	.set	shift, shift - 1				; \
 	cmp	dividend, divisor, lsl #shift			; \
 	adc	result, result, result				; \
-	subcs	dividend, dividend, divisor, lsl #shift
+	subcs	dividend, dividend, divisor, lsl #shift  ; \
+  nop
 #define ARM_DIV_BODY(dividend, divisor, result, curbit)	  	  \
 	clz	curbit, dividend				; \
 	clz	result, divisor					; \
 	sub	curbit, result, curbit				; \
 	rsbs	curbit, curbit, #31				; \
-	addne	curbit, curbit, curbit, lsl #1			; \
 	mov	result, #0					; \
-	addne	pc, pc, curbit, lsl #2				; \
-	nop							; \
+  sfi_new_bundle                ; \
+  add curbit, pc, curbit, lsl #4  ; \
+  add curbit, curbit, #8  ; \
+  sfi_bxne curbit         ; \
 	.set	shift, 32					; \
 	ARMV5_DIV_LOOP (dividend, divisor, result)		; \
 	ARMV5_DIV_LOOP (dividend, divisor, result)		; \
@@ -671,14 +1074,18 @@ pc		.req	r15
 #define ARMV5_MOD_LOOP(dividend, divisor)			  \
 	.set	shift, shift - 1				; \
 	cmp	dividend, divisor, lsl #shift			; \
-	subcs	dividend, dividend, divisor, lsl #shift
+	subcs	dividend, dividend, divisor, lsl #shift ; \
+  nop ; \
+  nop
 #define ARM_MOD_BODY(dividend, divisor, order, spare)	 	  \
 	clz	order, divisor					; \
 	clz	spare, dividend					; \
 	sub	order, order, spare				; \
 	rsbs	order, order, #31				; \
-	addne	pc, pc, order, lsl #3				; \
-	nop							; \
+  sfi_new_bundle                ; \
+  add spare, pc, order, lsl #4  ; \
+  add spare, spare, #8          ; \
+  sfi_bxne spare                ; \
 	.set	shift, 32					; \
 	ARMV5_MOD_LOOP (dividend, divisor)			; \
 	ARMV5_MOD_LOOP (dividend, divisor)			; \
@@ -1014,6 +1421,7 @@ FUNC_START aeabi_uidivmod
 	bx	r3
 #else
 	stmfd	sp!, { r0, r1, lr }
+  sfi_call_preamble
 	bl	SYM(__udivsi3)
 	ldmfd	sp!, { r1, r2, lr }
 	mul	r3, r2, r0
@@ -1165,6 +1573,7 @@ FUNC_START aeabi_idivmod
 	bx	r3
 #else
 	stmfd	sp!, { r0, r1, lr }
+  sfi_call_preamble
 	bl	SYM(__divsi3)
 	ldmfd	sp!, { r1, r2, lr }
 	mul	r3, r2, r0
@@ -1267,6 +1676,7 @@ L10:	cmp	ip, #0
 	/* LLVM LOCAL mainline */
 	do_push	{r1, lr}
 	mov	r0, #SIGFPE
+  sfi_call_preamble
 	bl	SYM(raise) __PLT__
 	/* APPLE LOCAL ARM MACH assembler */
 	RETLDM1 (r1)
@@ -1510,6 +1920,7 @@ L10:	cmp	ip, #0
 		
 /* Do not build the interworking functions when the target architecture does 
    not support Thumb instructions.  (This can be a multilib option).  */
+#if defined(__thumb__)
 #if defined __ARM_ARCH_4T__ || defined __ARM_ARCH_5T__\
       || defined __ARM_ARCH_5TE__ || defined __ARM_ARCH_5TEJ__ \
       || __ARM_ARCH__ >= 6
@@ -1688,6 +2099,7 @@ LSYM(Lchange_\register):
 /* APPLE LOCAL v7 support. Merge from mainline */
 #endif /* !__thumb2__ */
 #endif /* Arch supports thumb.  */
+#endif /* Thumb is enabled */
 
 #ifndef __symbian__
 #include "ieee754-df.S"
