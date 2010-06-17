@@ -4884,6 +4884,7 @@ bool TreeToLLVM::EmitBuiltinCall(tree exp, tree fndecl,
   // Varargs builtins.
   case BUILT_IN_VA_START:
   case BUILT_IN_STDARG_START:   return EmitBuiltinVAStart(exp);
+  case BUILT_IN_VA_ARG:         return EmitBuiltinVAArg(exp, Result);
   case BUILT_IN_VA_END:         return EmitBuiltinVAEnd(exp);
   case BUILT_IN_VA_COPY:        return EmitBuiltinVACopy(exp);
   case BUILT_IN_CONSTANT_P:     return EmitBuiltinConstantP(exp, Result);
@@ -6132,6 +6133,14 @@ bool TreeToLLVM::EmitBuiltinVAEnd(tree exp) {
   Arg = BitCastToType(Arg, Type::getInt8PtrTy(Context));
   Builder.CreateCall(Intrinsic::getDeclaration(TheModule, Intrinsic::vaend),
                      Arg);
+  return true;
+}
+
+bool TreeToLLVM::EmitBuiltinVAArg(tree exp, Value *&Result) {
+  // Emit an llvm.va_arg opcode for the call to __builtin_va_arg.
+  Result = Builder.CreateVAArg(
+      Emit(TREE_VALUE(TREE_OPERAND(exp, 1)), 0),
+      ConvertType(TREE_TYPE(exp))); // (the type info was faked earlier)
   return true;
 }
 

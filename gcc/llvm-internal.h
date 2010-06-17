@@ -538,6 +538,7 @@ private:
   bool EmitBuiltinExtendPointer(tree_node *exp, Value *&Result);
   bool EmitBuiltinVAStart(tree_node *exp);
   bool EmitBuiltinVAEnd(tree_node *exp);
+  bool EmitBuiltinVAArg(tree_node *exp, Value *&Result);
   bool EmitBuiltinVACopy(tree_node *exp);
   bool EmitBuiltinMemCopy(tree_node *exp, Value *&Result,
                           bool isMemMove, bool SizeCheck);

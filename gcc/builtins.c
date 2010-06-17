@@ -4359,6 +4359,34 @@ std_gimplify_va_arg_expr (tree valist, tree type, tree *pre_p, tree *post_p)
   return build_va_arg_indirect_ref (addr);
 }
 
+/* The PNaCL implementation of va_arg: turn __builtin_va_arg, aka
+   VA_ARG_EXPR, into a call to a fake intrinsic called "va_arg", which
+   will later get converted into an LLVM intrinsic. */
+tree
+pnacl_gimplify_va_arg_expr (tree valist, tree type, tree *pre_p, tree *post_p)
+{
+  tree expr;
+
+  if (flag_expand_va_arg)
+    return std_gimplify_va_arg_expr(valist, type, pre_p, post_p);
+
+  /* -fnoexpand_va_arg was specified.  Don't expand the VA_ARG
+     operator, but turn it back into a call to an external
+     function. */
+ 
+  /* Take the address: despite the syntax, the va_list is really being
+     passed by reference with the intent of modification.
+  */
+  valist = build1 (ADDR_EXPR,  
+                   build_pointer_type (TREE_TYPE (valist)),
+                   valist); 
+  valist = tree_cons (NULL_TREE, valist, NULL);
+  expr = build_function_call_expr (
+      implicit_built_in_decls[BUILT_IN_VA_ARG], valist);
+  TREE_TYPE(expr) = type;
+  return expr;
+}
+
 /* Build an indirect-ref expression over the given TREE, which represents a
    piece of a va_arg() expansion.  */
 tree
