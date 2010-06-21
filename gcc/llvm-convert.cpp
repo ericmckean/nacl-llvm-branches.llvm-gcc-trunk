@@ -3397,20 +3397,40 @@ Value *TreeToLLVM::EmitABS_EXPR(tree exp) {
   // Turn FP abs into fabs/fabsf.
   const char *Name = 0;
 
+  tree ArgType;
   switch (Op->getType()->getTypeID()) {
   default: assert(0 && "Unknown FP type!");
-  case Type::FloatTyID:  Name = "fabsf"; break;
-  case Type::DoubleTyID: Name = "fabs"; break;
+  case Type::FloatTyID:
+    Name = "fabsf";
+    ArgType = float_type_node;
+    break;
+  case Type::DoubleTyID:
+    Name = "fabs";
+    ArgType = double_type_node;
+    break;
   case Type::X86_FP80TyID:
   case Type::PPC_FP128TyID:
-  case Type::FP128TyID: Name = "fabsl"; break;
+  case Type::FP128TyID:
+    Name = "fabsl";
+    ArgType = long_double_type_node;
+    break;
   }
 
   Value *V = TheModule->getOrInsertFunction(Name, Op->getType(), Op->getType(),
                                             NULL);
+  // Determine the calling convention.
+  CallingConv::ID CallingConvention = CallingConv::C;
+#ifdef TARGET_ADJUST_LLVM_CC
+  tree FunctionType = build_function_type_list(ArgType, ArgType ,NULL);
+  TARGET_ADJUST_LLVM_CC(CallingConvention, FunctionType);
+#endif
+
+  Function *F = cast<Function>(V);
+  F->setCallingConv(CallingConvention);
   CallInst *Call = Builder.CreateCall(V, Op);
   Call->setDoesNotThrow();
   Call->setDoesNotAccessMemory();
+  Call->setCallingConv(CallingConvention);
   return Call;
 }
 
@@ -5071,6 +5091,7 @@ bool TreeToLLVM::EmitBuiltinCall(tree exp, tree fndecl,
   // Varargs builtins.
   case BUILT_IN_VA_START:
   case BUILT_IN_STDARG_START:   return EmitBuiltinVAStart(exp);
+  case BUILT_IN_VA_ARG:         return EmitBuiltinVAArg(exp, Result);
   case BUILT_IN_VA_END:         return EmitBuiltinVAEnd(exp);
   case BUILT_IN_VA_COPY:        return EmitBuiltinVACopy(exp);
   case BUILT_IN_CONSTANT_P:     return EmitBuiltinConstantP(exp, Result);
@@ -6509,6 +6530,14 @@ bool TreeToLLVM::EmitBuiltinVAEnd(tree exp) {
   Arg = BitCastToType(Arg, Type::getInt8PtrTy(Context));
   Builder.CreateCall(Intrinsic::getDeclaration(TheModule, Intrinsic::vaend),
                      Arg);
+  return true;
+}
+
+bool TreeToLLVM::EmitBuiltinVAArg(tree exp, Value *&Result) {
+  // Emit an llvm.va_arg opcode for the call to __builtin_va_arg.
+  Result = Builder.CreateVAArg(
+      Emit(TREE_VALUE(TREE_OPERAND(exp, 1)), 0),
+      ConvertType(TREE_TYPE(exp))); // (the type info was faked earlier)
   return true;
 }
 
