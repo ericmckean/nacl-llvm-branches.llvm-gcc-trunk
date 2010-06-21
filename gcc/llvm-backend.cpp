@@ -27,7 +27,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "llvm/DerivedTypes.h"
 #include "llvm/LLVMContext.h"
 #include "llvm/Module.h"
-#include "llvm/ModuleProvider.h"
 #include "llvm/PassManager.h"
 #include "llvm/ValueSymbolTable.h"
 #include "llvm/Analysis/LoopPass.h"
@@ -354,11 +353,11 @@ namespace llvm {
 static unsigned GuessAtInliningThreshold() {
   if (optimize_size)
     // Reduce inline limit.
-    return 50;
+    return 75;
   
   if (optimize >= 3)
-    return 250;
-  return 200;
+    return 275;
+  return 225;
 }
 
 void llvm_initialize_backend(void) {
@@ -394,6 +393,8 @@ void llvm_initialize_backend(void) {
     Args.push_back("--time-passes");
   if (fast_math_flags_set_p())
     Args.push_back("--enable-unsafe-fp-math");
+  if (flag_finite_math_only)
+    Args.push_back("--enable-finite-only-fp-math");
   if (!flag_omit_frame_pointer)
     Args.push_back("--disable-fp-elim");
   if (!flag_zero_initialized_in_bss)
@@ -406,6 +407,8 @@ void llvm_initialize_backend(void) {
     Args.push_back("--debug-pass=Arguments");
   if (flag_unwind_tables)
     Args.push_back("--unwind-tables");
+  if (!flag_schedule_insns)
+    Args.push_back("--pre-RA-sched=source");
 
   // If there are options that should be passed through to the LLVM backend
   // directly from the command line, do so now.  This is mainly for debugging
@@ -434,9 +437,12 @@ void llvm_initialize_backend(void) {
 
   std::vector<std::string> LLVM_Optns; // Avoid deallocation before opts parsed!
   if (llvm_optns) {
-    SplitString(llvm_optns, LLVM_Optns);
-    for(unsigned i = 0, e = LLVM_Optns.size(); i != e; ++i)
-      Args.push_back(LLVM_Optns[i].c_str());
+    llvm::SmallVector<llvm::StringRef, 16> Buf;
+    SplitString(llvm_optns, Buf);
+    for(unsigned i = 0, e = Buf.size(); i != e; ++i) {
+      LLVM_Optns.push_back(Buf[i]);
+      Args.push_back(LLVM_Optns.back().c_str());
+    }
   }
  
   Args.push_back(0);  // Null terminator.
@@ -627,7 +633,7 @@ static void createPerFunctionOptimizationPasses() {
   // Create and set up the per-function pass manager.
   // FIXME: Move the code generator to be function-at-a-time.
   PerFunctionPasses =
-    new FunctionPassManager(new ExistingModuleProvider(TheModule));
+    new FunctionPassManager(TheModule);
   PerFunctionPasses->add(new TargetData(*TheTarget->getTargetData()));
 
   // In -O0 if checking is disabled, we don't even have per-function passes.
@@ -666,21 +672,19 @@ static void createPerFunctionOptimizationPasses() {
       // -O3 and above.
       OptLevel = CodeGenOpt::Aggressive;
 
+    // Request that addPassesToEmitFile run the Verifier after running
+    // passes which modify the IR.
+#ifndef NDEBUG
+    bool DisableVerify = false;
+#else
+    bool DisableVerify = true;
+#endif
+
     // Normal mode, emit a .s file by running the code generator.
     // Note, this also adds codegenerator level optimization passes.
-    switch (TheTarget->addPassesToEmitFile(*PM, *AsmOutRawStream,
-                                           TargetMachine::AssemblyFile,
-                                           OptLevel)) {
-    default:
-    case FileModel::Error:
-      errs() << "Error interfacing to target machine!\n";
-      exit(1);
-    case FileModel::AsmFile:
-      break;
-    }
-
-    if (TheTarget->addPassesToEmitFileFinish(*PM, (MachineCodeEmitter *)0,
-                                             OptLevel)) {
+    if (TheTarget->addPassesToEmitFile(*PM, *AsmOutRawStream,
+                                       TargetMachine::CGFT_AssemblyFile,
+                                       OptLevel, DisableVerify)) {
       errs() << "Error interfacing to target machine!\n";
       exit(1);
     }
@@ -750,7 +754,7 @@ static void createPerModuleOptimizationPasses() {
     // this for fast -O0 compiles!
     if (PerModulePasses || 1) {
       FunctionPassManager *PM = CodeGenPasses =
-        new FunctionPassManager(new ExistingModuleProvider(TheModule));
+        new FunctionPassManager(TheModule);
       PM->add(new TargetData(*TheTarget->getTargetData()));
 
       CodeGenOpt::Level OptLevel = CodeGenOpt::Default;
@@ -761,21 +765,19 @@ static void createPerModuleOptimizationPasses() {
       case 3: OptLevel = CodeGenOpt::Aggressive; break;
       }
 
+      // Request that addPassesToEmitFile run the Verifier after running
+      // passes which modify the IR.
+#ifndef NDEBUG
+      bool DisableVerify = false;
+#else
+      bool DisableVerify = true;
+#endif
+
       // Normal mode, emit a .s file by running the code generator.
       // Note, this also adds codegenerator level optimization passes.
-      switch (TheTarget->addPassesToEmitFile(*PM, *AsmOutRawStream,
-                                             TargetMachine::AssemblyFile,
-                                             OptLevel)) {
-      default:
-      case FileModel::Error:
-        errs() << "Error interfacing to target machine!\n";
-        exit(1);
-      case FileModel::AsmFile:
-        break;
-      }
-
-      if (TheTarget->addPassesToEmitFileFinish(*PM, (MachineCodeEmitter *)0,
-                                               OptLevel)) {
+      if (TheTarget->addPassesToEmitFile(*PM, *AsmOutRawStream,
+                                         TargetMachine::CGFT_AssemblyFile,
+                                         OptLevel, DisableVerify)) {
         errs() << "Error interfacing to target machine!\n";
         exit(1);
       }
@@ -853,6 +855,7 @@ void llvm_asm_file_end(void) {
   if (flag_pch_file) {
     writeLLVMTypesStringTable();
     writeLLVMValues();
+    writeLLVMTypeUsers();
   }
 
   // Add an llvm.global_ctors global if needed.
@@ -971,7 +974,10 @@ void llvm_asm_file_end(void) {
 
 // llvm_call_llvm_shutdown - Release LLVM global state.
 void llvm_call_llvm_shutdown(void) {
+#ifndef NDEBUG
+  delete TheModule;
   llvm_shutdown();
+#endif
 }
 
 /// llvm_emit_code_for_current_function - Top level interface for emitting a
@@ -984,6 +990,18 @@ void llvm_emit_code_for_current_function(tree fndecl) {
     TREE_ASM_WRITTEN(fndecl) = 1;
     return;  // Do not process broken code.
   }
+
+  // Initial fill of TypeRefinementDatabase::TypeUsers[] if we're
+  // using a PCH.  Won't work until the GCC PCH has been read in and
+  // digested.
+  {
+    static bool done = false;
+    if (!done && flag_llvm_pch_read) {
+      readLLVMTypeUsers();
+      done = true;
+    }
+  }
+
   timevar_push(TV_LLVM_FUNCS);
 
   // Convert the AST to raw/ugly LLVM code.
@@ -1408,8 +1426,16 @@ void emit_global_to_llvm(tree decl) {
       unsigned TargetAlign =
         getTargetData().getABITypeAlignment(GV->getType()->getElementType());
       if (DECL_USER_ALIGN(decl) ||
-          8 * TargetAlign < (unsigned)DECL_ALIGN(decl))
+          8 * TargetAlign < (unsigned)DECL_ALIGN(decl)) {
         GV->setAlignment(DECL_ALIGN(decl) / 8);
+      }
+#ifdef TARGET_ADJUST_CSTRING_ALIGN
+      else if (DECL_INITIAL(decl) != error_mark_node && // uninitialized?
+               DECL_INITIAL(decl) &&
+               TREE_CODE(DECL_INITIAL(decl)) == STRING_CST) {
+        TARGET_ADJUST_CSTRING_ALIGN(GV);
+      }
+#endif
     }
 
     // Handle used decls

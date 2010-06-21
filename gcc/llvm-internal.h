@@ -68,6 +68,7 @@ namespace llvm {
 using namespace llvm;
 
 typedef IRBuilder<true, TargetFolder> LLVMBuilder;
+typedef SmallPtrSet<union tree_node *, 16> treeset;
 
 /// TheModule - This is the current global module that we are compiling into.
 ///
@@ -101,6 +102,8 @@ void readLLVMTypesStringTable();
 void writeLLVMTypesStringTable();
 void readLLVMValues();
 void writeLLVMValues();
+void readLLVMTypeUsers();
+void writeLLVMTypeUsers();
 void eraseLocalLLVMValues();
 void clearTargetBuiltinCache();
 const char* extractRegisterName(union tree_node*);
@@ -126,17 +129,10 @@ class TypeConverter {
   ///
   std::vector<tree_node*> PointersToReresolve;
 
-  /// FieldIndexMap - Holds the mapping from a FIELD_DECL to the index of the
-  /// corresponding LLVM field.
-  std::map<tree_node *, unsigned int> FieldIndexMap;
 public:
   TypeConverter() : ConvertingStruct(false) {}
   
   const Type *ConvertType(tree_node *type);
-
-  /// GetFieldIndex - Returns the index of the LLVM field corresponding to
-  /// this FIELD_DECL.
-  unsigned int GetFieldIndex(tree_node *field_decl);
 
   /// GCCTypeOverlapsWithLLVMTypePadding - Return true if the specified GCC type
   /// has any data that overlaps with structure padding in the specified LLVM
@@ -165,7 +161,6 @@ public:
 private:
   const Type *ConvertRECORD(tree_node *type, tree_node *orig_type);
   const Type *ConvertUNION(tree_node *type, tree_node *orig_type);
-  void SetFieldIndex(tree_node *field_decl, unsigned int Index);
   bool DecodeStructFields(tree_node *Field, StructTypeConversionInfo &Info);
   void DecodeStructBitField(tree_node *Field, StructTypeConversionInfo &Info);
   void SelectUnionMember(tree_node *type, StructTypeConversionInfo &Info);
@@ -177,12 +172,6 @@ extern TypeConverter *TheTypeConverter;
 ///
 inline const Type *ConvertType(tree_node *type) {
   return TheTypeConverter->ConvertType(type);
-}
-
-/// GetFieldIndex - Given FIELD_DECL obtain its index.
-///
-inline unsigned int GetFieldIndex(tree_node *field_decl) {
-  return TheTypeConverter->GetFieldIndex(field_decl);
 }
 
 /// getINTEGER_CSTVal - Return the specified INTEGER_CST value as a uint64_t.
@@ -292,6 +281,8 @@ class TreeToLLVM {
   BasicBlock *ReturnBB;
   BasicBlock *UnwindBB;
   unsigned ReturnOffset;
+  // Lexical BLOCKS that we have previously seen and processed.
+  treeset SeenBlocks;
 
   // State that changes as the function is emitted.
 
@@ -394,7 +385,25 @@ public:
   /// GCC type specified by GCCType to know which elements to copy.
   void EmitAggregateCopy(MemRef DestLoc, MemRef SrcLoc, tree_node *GCCType);
 
+  // 'desired' and 'grand' are GCC BLOCK nodes, representing lexical
+  // blocks.  Assumes we're in the 'grand' context; push contexts
+  // until we reach the 'desired' context.
+  void push_regions(tree_node *desired, tree_node *grand);
+
+  // Given a GCC lexical context (BLOCK or FUNCTION_DECL), make it the
+  // new current BLOCK/context/scope.  Emit any local variables found
+  // in the new context.  Note that the variable emission order must be
+  // consistent with and without debug info; otherwise, the register
+  // allocation would change with -g, and users dislike that.
+  void switchLexicalBlock(tree_node *exp);
+
 private: // Helper functions.
+
+  // Walk over the lexical BLOCK() tree of the given FUNCTION_DECL;
+  // set the BLOCK_NUMBER() fields to the depth of each block, and
+  // add every var or type encountered in the BLOCK_VARS() lists to
+  // the given set.
+  void setLexicalBlockDepths(tree_node *t, treeset &s, unsigned level);
 
   /// StartFunctionBody - Start the emission of 'fndecl', outputing all
   /// declarations for parameters and setting things up.
@@ -433,6 +442,10 @@ private: // Helper functions.
 
   /// EmitUnwindBlock - Emit the lazily created EH unwind block.
   void EmitUnwindBlock();
+
+  /// EmitDebugInfo - Return true if debug info is to be emitted for current 
+  /// function.
+  bool EmitDebugInfo();
 
 private: // Helpers for exception handling.
 
@@ -514,7 +527,7 @@ private:
   void EmitModifyOfRegisterVariable(tree_node *vardecl, Value *RHS);
 
   // Helpers for Builtin Function Expansion.
-  void EmitMemoryBarrier(bool ll, bool ls, bool sl, bool ss);
+  void EmitMemoryBarrier(bool ll, bool ls, bool sl, bool ss, bool device);
   Value *BuildVector(const std::vector<Value*> &Elts);
   Value *BuildVector(Value *Elt, ...);
   Value *BuildVectorShuffle(Value *InVec1, Value *InVec2, ...);

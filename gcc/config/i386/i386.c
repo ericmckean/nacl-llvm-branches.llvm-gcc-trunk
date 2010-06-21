@@ -1294,13 +1294,15 @@ enum x86_64_reg_class
     X86_64_X87_CLASS,
     X86_64_X87UP_CLASS,
     X86_64_COMPLEX_X87_CLASS,
-    X86_64_MEMORY_CLASS
+    X86_64_MEMORY_CLASS,
+    X86_64_POINTER_CLASS
   };
 #endif /* !ENABLE_LLVM */
 /* LLVM LOCAL end */
 static const char * const x86_64_reg_class_name[] = {
   "no", "integer", "integerSI", "sse", "sseSF", "sseDF",
-  "sseup", "x87", "x87up", "cplx87", "no"
+  /* LLVM LOCAL */
+  "sseup", "x87", "x87up", "cplx87", "no", "ptr"
 };
 
 #define MAX_CLASSES 4
@@ -2224,8 +2226,12 @@ override_options (void)
   /* When scheduling description is not available, disable scheduler pass
      so it won't slow down the compilation and make x87 code slower.  */
   /* APPLE LOCAL 5591571 */
+  /* LLVM LOCAL begin */
+#ifndef ENABLE_LLVM
   if (1 || !TARGET_SCHEDULE)
     flag_schedule_insns_after_reload = flag_schedule_insns = 0;
+#endif
+  /* LLVM LOCAL end */
 
   /* APPLE LOCAL begin dynamic-no-pic */
 #if TARGET_MACHO
@@ -2438,7 +2444,8 @@ x86_output_aligned_bss (FILE *file, tree decl ATTRIBUTE_UNUSED,
 #endif
 
 void
-optimization_options (int level, int size ATTRIBUTE_UNUSED)
+/* LLVM LOCAL */
+optimization_options (int level ATTRIBUTE_UNUSED, int size ATTRIBUTE_UNUSED)
 {
   /* APPLE LOCAL begin disable strict aliasing; breaks too much existing code.  */
 #if TARGET_MACHO
@@ -2447,10 +2454,14 @@ optimization_options (int level, int size ATTRIBUTE_UNUSED)
   /* APPLE LOCAL end disable strict aliasing; breaks too much existing code.  */
   /* For -O2 and beyond, turn off -fschedule-insns by default.  It tends to
      make the problem with not enough registers even worse.  */
+  /* LLVM LOCAL begin */
+#ifndef ENABLE_LLVM
 #ifdef INSN_SCHEDULING
   if (level > 1)
     flag_schedule_insns = 0;
 #endif
+#endif
+  /* LLVM LOCAL end */
 
   /* APPLE LOCAL begin pragma fenv */
   /* Trapping math is not needed by many users, and is expensive.
@@ -2499,14 +2510,18 @@ optimization_options (int level, int size ATTRIBUTE_UNUSED)
    per-function flags are reset.  */
 #if TARGET_MACHO
 void
-reset_optimization_options (int level, int size)
+reset_optimization_options (int level ATTRIBUTE_UNUSED, int size)
 {
   /* For -O2 and beyond, turn off -fschedule-insns by default.  It tends to
      make the problem with not enough registers even worse.  */
+  /* LLVM LOCAL begin */
+#ifndef ENABLE_LLVM
 #ifdef INSN_SCHEDULING
   if (level > 1)
     flag_schedule_insns = 0;
 #endif
+#endif
+  /* LLVM LOCAL end */
 
   /* APPLE LOCAL begin pragma fenv */
   /* Trapping math is not needed by many users, and is expensive.
@@ -3303,8 +3318,12 @@ merge_classes (enum x86_64_reg_class class1, enum x86_64_reg_class class2)
   if ((class1 == X86_64_INTEGERSI_CLASS && class2 == X86_64_SSESF_CLASS)
       || (class2 == X86_64_INTEGERSI_CLASS && class1 == X86_64_SSESF_CLASS))
     return X86_64_INTEGERSI_CLASS;
+  /* LLVM LOCAL begin */
   if (class1 == X86_64_INTEGER_CLASS || class1 == X86_64_INTEGERSI_CLASS
-      || class2 == X86_64_INTEGER_CLASS || class2 == X86_64_INTEGERSI_CLASS)
+      || class1 == X86_64_POINTER_CLASS
+      || class2 == X86_64_INTEGER_CLASS || class2 == X86_64_INTEGERSI_CLASS
+      || class2 == X86_64_POINTER_CLASS)
+  /* LLVM LOCAL end */
     return X86_64_INTEGER_CLASS;
 
   /* Rule #5: If one of the classes is X87, X87UP, or COMPLEX_X87 class,
@@ -3452,17 +3471,32 @@ classify_argument (enum machine_mode mode, tree type,
 	    if (!num)
 	      return 0;
 
-	    /* The partial classes are now full classes.  */
-	    if (subclasses[0] == X86_64_SSESF_CLASS && bytes != 4)
-	      subclasses[0] = X86_64_SSE_CLASS;
-	    if (subclasses[0] == X86_64_INTEGERSI_CLASS && bytes != 4)
-	      subclasses[0] = X86_64_INTEGER_CLASS;
-
+	    /* LLVM LOCAL begin 7387470 */
 	    for (i = 0; i < words; i++)
 	      classes[i] = subclasses[i % num];
 
-	    break;
+	    /* If the first register has a 32-bit class, but there are
+	       more than 32-bits in the type, upgrade it to the
+	       corresponding 64-bit class.  */
+	    if ((bytes > 4) &&
+		((subclasses[0] == X86_64_SSESF_CLASS) ||
+		 (subclasses[0] == X86_64_INTEGERSI_CLASS))) {
+		classes[0] = (subclasses[0] == X86_64_SSESF_CLASS) ?
+		  X86_64_SSE_CLASS : X86_64_INTEGER_CLASS;
+		/* subclasses[1] is only valid if num == 2.  If it's
+		   invalid, or it's set to a 32-bit class, AND there
+		   are more than twelve bytes in the type, upgrade the
+		   second register to 64-bits.  (If we got here, the
+		   first register already has a 64-bit class.)  */
+		if (bytes > 12 &&
+		    (num == 1 ||
+		     subclasses[1] == X86_64_SSESF_CLASS ||
+		     subclasses[1] == X86_64_INTEGERSI_CLASS))
+		  classes[1] = classes[0];
+	    }
 	  }
+	  break;
+	  /* LLVM LOCAL end 7387470 */
 	case UNION_TYPE:
 	case QUAL_UNION_TYPE:
 	  /* Unions are similar to RECORD_TYPE but offset is always 0.
@@ -3551,6 +3585,14 @@ classify_argument (enum machine_mode mode, tree type,
       classes[1] = X86_64_SSEUP_CLASS;
       return 2;
     case DImode:
+      /* LLVM LOCAL begin */
+      if (POINTER_TYPE_P(type))
+        {
+          classes[0] = X86_64_POINTER_CLASS;
+          return 1;
+        }
+      /* fall through */
+      /* LLVM LOCAL end */
     case SImode:
     case HImode:
     case QImode:
@@ -3651,6 +3693,8 @@ examine_argument (enum machine_mode mode, tree type, int in_return,
       {
       case X86_64_INTEGER_CLASS:
       case X86_64_INTEGERSI_CLASS:
+      /* LLVM LOCAL */
+      case X86_64_POINTER_CLASS:
 	(*int_nregs)++;
 	break;
       case X86_64_SSE_CLASS:
@@ -3764,6 +3808,8 @@ construct_container (enum machine_mode mode, enum machine_mode orig_mode,
       {
       case X86_64_INTEGER_CLASS:
       case X86_64_INTEGERSI_CLASS:
+      /* LLVM LOCAL */
+      case X86_64_POINTER_CLASS:
 	return gen_rtx_REG (mode, intreg[0]);
       case X86_64_SSE_CLASS:
       case X86_64_SSESF_CLASS:
@@ -3799,6 +3845,8 @@ construct_container (enum machine_mode mode, enum machine_mode orig_mode,
 	    break;
 	  case X86_64_INTEGER_CLASS:
 	  case X86_64_INTEGERSI_CLASS:
+          /* LLVM LOCAL */
+          case X86_64_POINTER_CLASS:
 	    /* Merge TImodes on aligned occasions here too.  */
 	    if (i * 8 + 8 > bytes)
 	      tmpmode = mode_for_size ((bytes - i * 8) * BITS_PER_UNIT, MODE_INT, 0);

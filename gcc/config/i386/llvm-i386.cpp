@@ -606,6 +606,23 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
     Result = Builder.CreateLoad(Ptr);
     return true;
   }
+  case IX86_BUILTIN_PALIGNR:
+  case IX86_BUILTIN_PALIGNR128: {
+    if (ConstantInt *Elt = dyn_cast<ConstantInt>(Ops[2])) {
+      Function *palignr =
+	Intrinsic::getDeclaration(TheModule, FnCode == IX86_BUILTIN_PALIGNR ?
+				  Intrinsic::x86_ssse3_palign_r :
+				  Intrinsic::x86_ssse3_palign_r_128);
+      Value *Op2 = Builder.CreateTrunc(Ops[2], Type::getInt8Ty(Context));
+      Value *CallOps[3] = { Ops[0], Ops[1], Op2 };
+      Result = Builder.CreateCall(palignr, CallOps, CallOps+3);
+      return true;
+    } else {
+      error("%Hmask must be an immediate", &EXPR_LOCATION(exp));
+      Result = Ops[0];
+      return true;
+    }
+  }
   }
 
   return false;
@@ -638,7 +655,7 @@ static bool llvm_x86_is_all_integer_types(const Type *Ty) {
   for (Type::subtype_iterator I = Ty->subtype_begin(), E = Ty->subtype_end();
        I != E; ++I) {
     const Type *STy = I->get();
-    if (!STy->isIntOrIntVector() && !isa<PointerType>(STy))
+    if (!STy->isIntOrIntVectorTy() && !STy->isPointerTy())
       return false;
   }
   return true;
@@ -670,11 +687,8 @@ llvm_x86_32_should_pass_aggregate_in_mixed_regs(tree TreeType, const Type *Ty,
     // 32 and 64-bit integers are fine, as are float and double.  Long double
     // (which can be picked as the type for a union of 16 bytes) is not fine, 
     // as loads and stores of it get only 10 bytes.
-    if (EltTy == Type::getInt32Ty(Context) ||
-        EltTy == Type::getInt64Ty(Context) || 
-        EltTy->isFloatTy() ||
-        EltTy->isDoubleTy() ||
-        isa<PointerType>(EltTy)) {
+    if (EltTy->isIntegerTy(32) || EltTy->isIntegerTy(64) ||
+        EltTy->isFloatTy() || EltTy->isDoubleTy() || EltTy->isPointerTy()) {
       Elts.push_back(EltTy);
       continue;
     }
@@ -701,11 +715,10 @@ bool llvm_x86_should_pass_aggregate_as_fca(tree type, const Type *Ty) {
   // makes it ABI compatible for x86-64. Same for _Complex char and _Complex
   // short in 32-bit.
   const Type *EltTy = STy->getElementType(0);
-  return !((TARGET_64BIT && (EltTy->isInteger() ||
+  return !((TARGET_64BIT && (EltTy->isIntegerTy() ||
                              EltTy->isFloatTy() ||
                              EltTy->isDoubleTy())) ||
-           EltTy == Type::getInt16Ty(Context) ||
-           EltTy == Type::getInt8Ty(Context));
+           EltTy->isIntegerTy(16) || EltTy->isIntegerTy(8));
 }
 
 /* Target hook for llvm-abi.h. It returns true if an aggregate of the
@@ -744,14 +757,14 @@ static void count_num_registers_uses(std::vector<const Type*> &ScalarElts,
       else
         // All other vector scalar values are passed in XMM registers.
         ++NumXMMs;
-    } else if (Ty->isInteger() || isa<PointerType>(Ty)) {
+    } else if (Ty->isIntegerTy() || Ty->isPointerTy()) {
       ++NumGPRs;
     } else if (Ty->isVoidTy()) {
       // Padding bytes that are not passed anywhere
       ;
     } else {
       // Floating point scalar argument.
-      assert(Ty->isFloatingPoint() && Ty->isPrimitiveType() &&
+      assert(Ty->isFloatingPointTy() && Ty->isPrimitiveType() &&
              "Expecting a floating point primitive type!");
       if (Ty->getTypeID() == Type::FloatTyID
           || Ty->getTypeID() == Type::DoubleTyID)
@@ -826,15 +839,16 @@ llvm_x86_64_should_pass_aggregate_in_mixed_regs(tree TreeType, const Type *Ty,
   if (!NumClasses)
     return false;
 
-  if (NumClasses == 1 && Class[0] == X86_64_INTEGERSI_CLASS)
-    // This will fit in one i32 register.
-    return false;
-
   for (int i = 0; i < NumClasses; ++i) {
     switch (Class[i]) {
     case X86_64_INTEGER_CLASS:
     case X86_64_INTEGERSI_CLASS:
       Elts.push_back(Type::getInt64Ty(Context));
+      totallyEmpty = false;
+      Bytes -= 8;
+      break;
+    case X86_64_POINTER_CLASS:
+      Elts.push_back(Type::getInt8PtrTy(Context));
       totallyEmpty = false;
       Bytes -= 8;
       break;
@@ -865,7 +879,7 @@ llvm_x86_64_should_pass_aggregate_in_mixed_regs(tree TreeType, const Type *Ty,
               Ty = STy->getElementType(0);
           if (const VectorType *VTy = dyn_cast<VectorType>(Ty)) {
             if (VTy->getNumElements() == 2) {
-              if (VTy->getElementType()->isInteger()) {
+              if (VTy->getElementType()->isIntegerTy()) {
                 Elts.push_back(VectorType::get(Type::getInt64Ty(Context), 2));
               } else {
                 Elts.push_back(VectorType::get(Type::getDoubleTy(Context), 2));
@@ -873,7 +887,7 @@ llvm_x86_64_should_pass_aggregate_in_mixed_regs(tree TreeType, const Type *Ty,
               Bytes -= 8;
             } else {
               assert(VTy->getNumElements() == 4);
-              if (VTy->getElementType()->isInteger()) {
+              if (VTy->getElementType()->isIntegerTy()) {
                 Elts.push_back(VectorType::get(Type::getInt32Ty(Context), 4));
               } else {
                 Elts.push_back(VectorType::get(Type::getFloatTy(Context), 4));
@@ -902,6 +916,9 @@ llvm_x86_64_should_pass_aggregate_in_mixed_regs(tree TreeType, const Type *Ty,
         } else if (Class[i+1] == X86_64_INTEGER_CLASS) {
           Elts.push_back(VectorType::get(Type::getFloatTy(Context), 2));
           Elts.push_back(Type::getInt64Ty(Context));
+        } else if (Class[i+1] == X86_64_POINTER_CLASS) {
+          Elts.push_back(VectorType::get(Type::getFloatTy(Context), 2));
+          Elts.push_back(Type::getInt8PtrTy(Context));
         } else if (Class[i+1] == X86_64_NO_CLASS) {
           // padding bytes, don't pass
           Elts.push_back(Type::getDoubleTy(Context));
@@ -1069,7 +1086,8 @@ static bool llvm_suitable_multiple_ret_value_type(const Type *Ty,
     return false;
 
   if (NumClasses == 1 && 
-      (Class[0] == X86_64_INTEGERSI_CLASS || Class[0] == X86_64_INTEGER_CLASS))
+      (Class[0] == X86_64_INTEGERSI_CLASS || Class[0] == X86_64_INTEGER_CLASS ||
+       Class[0] == X86_64_POINTER_CLASS))
     // This will fit in one i64 register.
     return false;
 
@@ -1113,11 +1131,14 @@ const Type *llvm_x86_scalar_type_for_struct_return(tree type, unsigned *Offset) 
 
     if (NumClasses == 1) {
       if (Class[0] == X86_64_INTEGERSI_CLASS ||
-          Class[0] == X86_64_INTEGER_CLASS) {
+          Class[0] == X86_64_INTEGER_CLASS ||
+          Class[0] == X86_64_POINTER_CLASS) {
         // one int register
         HOST_WIDE_INT Bytes =
           (Mode == BLKmode) ? int_size_in_bytes(type) : 
                               (int) GET_MODE_SIZE(Mode);
+        if (Bytes==8 && Class[0] == X86_64_POINTER_CLASS)
+          return Type::getInt8PtrTy(Context);
         if (Bytes>4)
           return Type::getInt64Ty(Context);
         else if (Bytes>2)
@@ -1135,6 +1156,8 @@ const Type *llvm_x86_scalar_type_for_struct_return(tree type, unsigned *Offset) 
             Class[0] == X86_64_NO_CLASS ||
             Class[0] == X86_64_INTEGERSI_CLASS)
           return Type::getInt64Ty(Context);
+        else if (Class[0] == X86_64_POINTER_CLASS)
+          return Type::getInt8PtrTy(Context);
         else if (Class[0] == X86_64_SSE_CLASS || Class[0] == X86_64_SSEDF_CLASS)
           return Type::getDoubleTy(Context);
         else if (Class[0] == X86_64_SSESF_CLASS)
@@ -1146,6 +1169,8 @@ const Type *llvm_x86_scalar_type_for_struct_return(tree type, unsigned *Offset) 
         if (Class[1] == X86_64_INTEGERSI_CLASS ||
             Class[1] == X86_64_INTEGER_CLASS)
           return Type::getInt64Ty(Context);
+        else if (Class[1] == X86_64_POINTER_CLASS)
+          return Type::getInt8PtrTy(Context);
         else if (Class[1] == X86_64_SSE_CLASS || Class[1] == X86_64_SSEDF_CLASS)
           return Type::getDoubleTy(Context);
         else if (Class[1] == X86_64_SSESF_CLASS)
@@ -1189,6 +1214,9 @@ llvm_x86_64_get_multiple_return_reg_classes(tree TreeType, const Type *Ty,
   if (NumClasses == 1 && Class[0] == X86_64_INTEGER_CLASS)
      assert(0 && "This type does not need multiple return registers!");
 
+  if (NumClasses == 1 && Class[0] == X86_64_POINTER_CLASS)
+     assert(0 && "This type does not need multiple return registers!");
+
   // classify_argument uses a single X86_64_NO_CLASS as a special case for
   // empty structs. Recognize it and don't add any return values in that
   // case.
@@ -1200,6 +1228,10 @@ llvm_x86_64_get_multiple_return_reg_classes(tree TreeType, const Type *Ty,
     case X86_64_INTEGER_CLASS:
     case X86_64_INTEGERSI_CLASS:
       Elts.push_back(Type::getInt64Ty(Context));
+      Bytes -= 8;
+      break;
+    case X86_64_POINTER_CLASS:
+      Elts.push_back(Type::getInt8PtrTy(Context));
       Bytes -= 8;
       break;
     case X86_64_SSE_CLASS:
@@ -1229,14 +1261,14 @@ llvm_x86_64_get_multiple_return_reg_classes(tree TreeType, const Type *Ty,
               Ty = STy->getElementType(0);
           if (const VectorType *VTy = dyn_cast<VectorType>(Ty)) {
             if (VTy->getNumElements() == 2) {
-              if (VTy->getElementType()->isInteger())
+              if (VTy->getElementType()->isIntegerTy())
                 Elts.push_back(VectorType::get(Type::getInt64Ty(Context), 2));
               else
                 Elts.push_back(VectorType::get(Type::getDoubleTy(Context), 2));
               Bytes -= 8;
             } else {
               assert(VTy->getNumElements() == 4);
-              if (VTy->getElementType()->isInteger())
+              if (VTy->getElementType()->isIntegerTy())
                 Elts.push_back(VectorType::get(Type::getInt32Ty(Context), 4));
               else
                 Elts.push_back(VectorType::get(Type::getFloatTy(Context), 4));
@@ -1264,6 +1296,9 @@ llvm_x86_64_get_multiple_return_reg_classes(tree TreeType, const Type *Ty,
         } else if (Class[i+1] == X86_64_INTEGER_CLASS) {
           Elts.push_back(VectorType::get(Type::getFloatTy(Context), 2));
           Elts.push_back(Type::getInt64Ty(Context));
+        } else if (Class[i+1] == X86_64_POINTER_CLASS) {
+          Elts.push_back(VectorType::get(Type::getFloatTy(Context), 2));
+          Elts.push_back(Type::getInt8PtrTy(Context));
         } else if (Class[i+1] == X86_64_NO_CLASS) {
           Elts.push_back(Type::getDoubleTy(Context));
           Bytes -= 16;
@@ -1339,7 +1374,7 @@ static void llvm_x86_extract_mrv_array_element(Value *Src, Value *Dest,
   Idxs[1] = ConstantInt::get(llvm::Type::getInt32Ty(Context), DestFieldNo);
   Idxs[2] = ConstantInt::get(llvm::Type::getInt32Ty(Context), DestElemNo);
   Value *GEP = Builder.CreateGEP(Dest, Idxs, Idxs+3, "mrv_gep");
-  if (isa<VectorType>(STy->getElementType(SrcFieldNo))) {
+  if (STy->getElementType(SrcFieldNo)->isVectorTy()) {
     Value *ElemIndex = ConstantInt::get(Type::getInt32Ty(Context), SrcElemNo);
     Value *EVIElem = Builder.CreateExtractElement(EVI, ElemIndex, "mrv");
     Builder.CreateStore(EVIElem, GEP, isVolatile);
@@ -1403,7 +1438,7 @@ void llvm_x86_extract_multiple_return_value(Value *Src, Value *Dest,
     } 
 
     // Special treatement for _Complex.
-    if (isa<StructType>(DestElemType)) {
+    if (DestElemType->isStructTy()) {
       llvm::Value *Idxs[3];
       Idxs[0] = ConstantInt::get(llvm::Type::getInt32Ty(Context), 0);
       Idxs[1] = ConstantInt::get(llvm::Type::getInt32Ty(Context), DNO);
@@ -1467,7 +1502,8 @@ bool llvm_x86_should_pass_aggregate_in_integer_regs(tree type, unsigned *size,
     int NumClasses = ix86_ClassifyArgument(Mode, type, Class, 0);
     *DontCheckAlignment= true;
     if (NumClasses == 1 && (Class[0] == X86_64_INTEGER_CLASS ||
-                            Class[0] == X86_64_INTEGERSI_CLASS)) {
+                            Class[0] == X86_64_INTEGERSI_CLASS ||
+                            Class[0] == X86_64_POINTER_CLASS)) {
       // one int register
       HOST_WIDE_INT Bytes =
         (Mode == BLKmode) ? int_size_in_bytes(type) : (int) GET_MODE_SIZE(Mode);
@@ -1480,8 +1516,10 @@ bool llvm_x86_should_pass_aggregate_in_integer_regs(tree type, unsigned *size,
       return true;
     }
     if (NumClasses == 2 && (Class[0] == X86_64_INTEGERSI_CLASS ||
-                            Class[0] == X86_64_INTEGER_CLASS)) {
-      if (Class[1] == X86_64_INTEGER_CLASS) {
+                            Class[0] == X86_64_INTEGER_CLASS ||
+                            Class[0] == X86_64_POINTER_CLASS)) {
+      if (Class[1] == X86_64_INTEGER_CLASS ||
+          Class[1] == X86_64_POINTER_CLASS) {
         // 16 byte object, 2 int registers
         *size = 16;
         return true;

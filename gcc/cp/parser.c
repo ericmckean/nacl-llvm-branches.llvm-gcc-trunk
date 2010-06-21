@@ -2819,7 +2819,11 @@ objc_cp_parser_at_property (cp_parser *parser)
 	/* Consume ')' */
 	cp_lexer_consume_token (parser->lexer);
     }
-    objc_cp_parse_property_decl (parser);
+  /* APPLE LOCAL begin weak_import on property 7496972 */
+  note_objc_property_decl_context ();
+  objc_cp_parse_property_decl (parser);
+  note_end_objc_property_decl_context ();
+  /* APPLE LOCAL end weak_import on property 7496972 */
 }
 /* APPLE LOCAL end C* property (Radar 4436866, 4591909) */
 
@@ -20867,7 +20871,7 @@ build_block_struct_type (struct block_sema_info * block_impl)
 /**
  build_block_struct_initlist - builds the initializer list:
  { &_NSConcreteStackBlock or &_NSConcreteGlobalBlock // __isa,
-   BLOCK_HAS_DESCRIPTOR | BLOCK_HAS_COPY_DISPOSE | BLOCK_IS_GLOBAL // __flags,
+   BLOCK_USE_STRET | BLOCK_HAS_COPY_DISPOSE | BLOCK_IS_GLOBAL // __flags,
    0, // __reserved,
    &helper_1, // __FuncPtr,
    &static_descriptor_variable // __descriptor,
@@ -20884,7 +20888,8 @@ build_block_struct_initlist (tree block_struct_type,
 			     struct block_sema_info *block_impl)
 {
   tree expr, chain, helper_addr;
-  unsigned flags = BLOCK_HAS_DESCRIPTOR;
+  /* APPLE LOCAL radar 7735196 */
+  unsigned flags = 0;
   static tree NSConcreteStackBlock_decl = NULL_TREE;
   static tree NSConcreteGlobalBlock_decl = NULL_TREE;
   VEC(constructor_elt,gc) *impl_v = NULL;
@@ -20900,6 +20905,10 @@ build_block_struct_initlist (tree block_struct_type,
   if (block_impl->BlockImportsCxxObjects)
     flags |= BLOCK_HAS_CXX_OBJ;
   /* APPLE LOCAL end radar 6214617 */
+/* APPLE LOCAL begin radar 7735196 */
+  if (block_impl->return_type && aggregate_value_p(block_impl->return_type, 0))
+    flags |= BLOCK_USE_STRET;
+  /* APPLE LOCAL end 7735196 */
   /* APPLE LOCAL begin radar 6230297 */
   if (!current_function_decl ||
       (block_impl->block_ref_decl_list == NULL_TREE &&
@@ -21078,12 +21087,11 @@ build_block_literal_tmp (const char *name,
   CONSTRUCTOR_ELTS (constructor) = build_block_struct_initlist (block_struct_type,
                                                                 block_impl);
   /* Temporary representing a global block is made global static.  */
-  /* APPLE LOCAL begin radar 6230297 */
+  /* APPLE LOCAL radar 6230297 */
   if (staticBlockTmp || global_bindings_p ()) {
     TREE_PUBLIC (block_holder_tmp_decl) = 0;
     TREE_STATIC (block_holder_tmp_decl) = 1;
   }
-  /* APPLE LOCAL end radar 6230297 */
   cp_finish_decl (block_holder_tmp_decl, constructor, 0, 0, LOOKUP_ONLYCONVERTING);
   return block_holder_tmp_decl;
 }
@@ -21721,7 +21729,17 @@ build_block_byref_decl (tree name, tree decl, tree exp)
 
   /* Current scope must be that of the main function body. */
   /* FIXME gcc_assert (current_scope->function_body);*/
-  pushdecl (byref_decl);
+  /* LLVM LOCAL begin 7387470 */
+  /* Find the scope for function body (outer-most scope) and insert
+     this variable in that scope. This is to avoid duplicate
+     declaration of the save variable. */
+  {
+    struct cp_binding_level *b = current_binding_level;
+    while (b->level_chain->kind != sk_function_parms)
+      b = b->level_chain;
+    pushdecl_with_scope (byref_decl, b, /*is_friend=*/false);
+  }
+  /* LLVM LOCAL end 7387470 */
   mark_used (byref_decl);
   /* APPLE LOCAL begin radar 6083129 -  byref escapes (cp) */
   /* FIXME: finish this off, ensure the decl is scoped appropriately
@@ -22036,7 +22054,7 @@ declare_block_prologue_local_vars (tree self_parm, tree component,
  */
 static void
 declare_block_prologue_local_byref_vars (tree self_parm, tree component,
-				   tree stmt)
+					 tree stmt)
 {
   tree decl, block_component;
   tree_stmt_iterator i;

@@ -32,6 +32,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "llvm/Analysis/DebugInfo.h"
 #include "llvm/Support/Dwarf.h"
 #include "llvm/Support/ValueHandle.h"
+#include "llvm/Support/Allocator.h"
 
 extern "C" {
 #include "llvm.h"
@@ -61,15 +62,43 @@ private:
   const char *PrevFullPath;             // Previous location file encountered.
   int PrevLineNo;                       // Previous location line# encountered.
   BasicBlock *PrevBB;                   // Last basic block encountered.
-  std::map<std::string, WeakVH > CUCache;
+  DICompileUnit TheCU;                  // The compile unit.
+
+  // Current GCC lexical block (or enclosing FUNCTION_DECL).
+  tree_node *CurrentGCCLexicalBlock;	
+  
+  // This counter counts debug info for forward referenced subroutine types.
+  // This counter is used to create unique name for such types so that their 
+  // debug info (through MDNodes) is not shared accidently.
+  unsigned FwdTypeCount;
+
   std::map<tree_node *, WeakVH > TypeCache;
                                         // Cache of previously constructed 
                                         // Types.
-  std::vector<DIDescriptor> RegionStack;
+  std::map<tree_node *, WeakVH > SPCache;
+                                        // Cache of previously constructed 
+                                        // Subprograms.
+  std::map<tree_node *, WeakVH> NameSpaceCache;
+                                        // Cache of previously constructed name 
+                                        // spaces.
+
+  SmallVector<WeakVH, 4> RegionStack;
                                         // Stack to track declarative scopes.
   
-  std::map<tree_node *, DIDescriptor> RegionMap;
-public:
+  std::map<tree_node *, WeakVH> RegionMap;
+
+  // Starting at the 'desired' BLOCK, recursively walk back to the
+  // 'grand' context, and return pushing regions to make 'desired' the
+  // current context.  'desired' should be a GCC lexical BLOCK.
+  // 'grand' may be a BLOCK or a FUNCTION_DECL, and it's presumed to
+  // be an ancestor of 'desired'.
+  void push_regions(tree_node *desired, tree_node *grand);
+
+  /// FunctionNames - This is a storage for function names that are
+  /// constructed on demand. For example, C++ destructors, C++ operators etc..
+  llvm::BumpPtrAllocator FunctionNames;
+
+ public:
   DebugInfo(Module *m);
 
   /// Initialize - Initialize debug info by creating compile unit for
@@ -81,6 +110,14 @@ public:
   void setLocationFile(const char *FullPath) { CurFullPath = FullPath; }
   void setLocationLine(int LineNo)           { CurLineNo = LineNo; }
   
+  tree_node *getCurrentLexicalBlock() { return CurrentGCCLexicalBlock; }
+  void setCurrentLexicalBlock(tree_node *lb) { CurrentGCCLexicalBlock = lb; }
+
+  // Pop the current region/lexical-block back to 'grand', then push
+  // regions to arrive at 'desired'.  This was inspired (cribbed from)
+  // by GCC's cfglayout.c:change_scope().
+  void change_regions(tree_node *desired, tree_node *grand);
+
   /// EmitFunctionStart - Constructs the debug code for entering a function -
   /// "llvm.dbg.func.start."
   void EmitFunctionStart(tree_node *FnDecl, Function *Fn, BasicBlock *CurBB);
@@ -131,8 +168,19 @@ public:
   DICompileUnit getOrCreateCompileUnit(const char *FullPath,
                                        bool isMain = false);
 
+  /// getOrCreateFile - Get DIFile descriptor.
+  DIFile getOrCreateFile(const char *FullPath);
+
   /// findRegion - Find tree_node N's region.
   DIDescriptor findRegion(tree_node *n);
+  
+  /// getOrCreateNameSpace - Get name space descriptor for the tree node.
+  DINameSpace getOrCreateNameSpace(tree_node *Node, DIDescriptor Context);
+
+  /// getFunctionName - Get function name for the given FnDecl. If the
+  /// name is constructred on demand (e.g. C++ destructor) then the name
+  /// is stored on the side.
+  StringRef getFunctionName(tree_node *FnDecl);
 };
 
 } // end namespace llvm
