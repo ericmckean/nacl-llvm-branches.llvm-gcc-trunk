@@ -2521,10 +2521,15 @@ static tree get_final_block_variable (tree name, tree var) {
     {
       /* 'byref' globals are never copied-in. So, do not add
        them to the copied-in list. */
-      if (!in_block_global_byref_list (decl))
+      if (!in_block_global_byref_list (decl)) {
+	/* APPLE LOCAL begin radar 7721728 */
+        if (TREE_CODE (TREE_TYPE (decl)) == ARRAY_TYPE)
+          error ("cannot access copied-in variable of array type inside block");
+	/* APPLE LOCAL end radar 7721728 */
       /* build a new decl node. set its type to 'const' type
         of the old decl. */
         decl = build_block_ref_decl (name, decl);
+      }
     }
   }
   return decl;
@@ -2993,6 +2998,11 @@ finish_id_expression (tree id_expression,
 	}
     }
 
+  /* APPLE LOCAL begin 7465602 "unavailable" attribute */
+  if (TREE_UNAVAILABLE (decl))
+    error_unavailable_use (decl);
+  /* APPLE LOCAL end 7465602 "unavailable" attribute */
+
   if (TREE_DEPRECATED (decl))
     warn_deprecated_use (decl);
 
@@ -3223,18 +3233,14 @@ expand_body (tree fn)
      `-fexternal-templates'; we instantiate the function, even though
      we're not planning on emitting it, in case we get a chance to
      inline it.  */
-  /* LLVM LOCAL extern inline */
-  if (OMIT_FUNCTION_BODY (fn))
+  if (DECL_EXTERNAL (fn))
     return;
 
   /* ??? When is this needed?  */
   saved_function = current_function_decl;
 
   /* Emit any thunks that should be emitted at the same time as FN.  */
-  /* LLVM LOCAL begin extern inline */
-  if (!DECL_EXTERNAL (fn))
-    emit_associated_thunks (fn);
-  /* LLVM LOCAL end extern inline */
+  emit_associated_thunks (fn);
 
   /* This function is only called from cgraph, or recursively from
      emit_associated_thunks.  In neither case should we be currently

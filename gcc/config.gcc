@@ -430,6 +430,7 @@ case ${target} in
   tm_p_file="${tm_p_file} darwin-protos.h"
   # APPLE LOCAL 5681645
   tmake_file="t-darwin ${cpu_type}/t-darwin"
+  # LLVM LOCAL put va_opt in GC memory 7210265
   target_gtfiles="\$(srcdir)/config/darwin.c \$(srcdir)/config/darwin-c.c"
   extra_options="${extra_options} darwin.opt"
   c_target_objs="darwin-c.o"
@@ -1792,7 +1793,14 @@ powerpc64-*-linux*)
 	tm_file="${tm_file} dbxelf.h elfos.h svr4.h freebsd-spec.h rs6000/sysv4.h"
 	test x$with_cpu != x || cpu_is_64bit=yes
 	test x$cpu_is_64bit != xyes || tm_file="${tm_file} rs6000/default64.h"
-	tm_file="rs6000/biarch64.h ${tm_file} rs6000/linux64.h"
+# LLVM LOCAL begin
+        # Disable biarch builds for powerpc64-linux for now. There is no support for biarch
+        # builds in llvm-gcc yet. With this change it is possible to create non-biarch builds
+        # for powerpc64-linux which was not possible before. So this change has two effects:
+        #   1. Disable (broken) biarch builds
+        #   2. Allow non-biarch builds.
+	tm_file="${tm_file} rs6000/linux64.h"
+# LLVM LOCAL end
 	if test x${enable_secureplt} = xyes; then
 		tm_file="rs6000/secureplt.h ${tm_file}"
 	fi

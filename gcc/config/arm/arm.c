@@ -1716,11 +1716,15 @@ arm_override_options (void)
 
   /* For arm2/3 there is no need to do any scheduling if there is only
      a floating point emulator, or we are doing software floating-point.  */
+  /* LLVM LOCAL begin */
+#ifndef ENABLE_LLVM
   if ((TARGET_SOFT_FLOAT
        || arm_fpu_tune == FPUTYPE_FPA_EMU2
        || arm_fpu_tune == FPUTYPE_FPA_EMU3)
       && (tune_flags & FL_MODE32) == 0)
     flag_schedule_insns = flag_schedule_insns_after_reload = 0;
+#endif
+  /* LLVM LOCAL end */
 
   if (target_thread_switch)
     {
@@ -1783,11 +1787,15 @@ arm_override_options (void)
 
   /* APPLE LOCAL v7 support. Merge from mainline */
   /* ??? We might want scheduling for thumb2.  */
+  /* LLVM LOCAL begin */
+#ifndef ENABLE_LLVM
   if (TARGET_THUMB && flag_schedule_insns)
     {
       /* Don't warn since it's on by default in -O2.  */
       flag_schedule_insns = 0;
     }
+#endif
+  /* LLVM LOCAL end */
 
   if (optimize_size)
     {
@@ -2421,8 +2429,22 @@ arm_split_compare_and_swap(rtx dest, rtx mem, rtx oldval, rtx newval,
   enum machine_mode mode = GET_MODE (mem);
   rtx label1, label2, x, cond = gen_rtx_REG (CCmode, CC_REGNUM);
   rtx dest_cmp, oldval_cmp;
+  rtx block_scratch, block_unspec;
 
-  emit_insn (gen_memory_barrier ());
+  block_scratch = gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (Pmode));
+  block_unspec = gen_rtx_UNSPEC (BLKmode,
+                                 gen_rtvec (1, gen_rtx_MEM (BLKmode,
+                                                            block_scratch)),
+                                 UNSPEC_BARRIER);
+
+  /* Use the insn patterns directly rather than the expander since we're
+   * post-reload here. The v6 pattern needs a scratch register and we
+   * have one here already, so just re-use it. */
+  if (arm_arch7a)
+    emit_insn (gen_arm_memory_barrier_v7 (block_scratch, block_unspec));
+  else
+    emit_insn (gen_arm_memory_barrier_v6_explicit(block_scratch,
+                                                  block_unspec, scratch));
 
   label1 = gen_rtx_LABEL_REF (VOIDmode, gen_label_rtx ());
   label2 = gen_rtx_LABEL_REF (VOIDmode, gen_label_rtx ());
@@ -2481,7 +2503,11 @@ arm_split_compare_and_swap(rtx dest, rtx mem, rtx oldval, rtx newval,
   x = gen_rtx_IF_THEN_ELSE (VOIDmode, x, label1, pc_rtx);
   x = emit_jump_insn (gen_rtx_SET (VOIDmode, pc_rtx, x));
 
-  emit_insn (gen_memory_sync ());
+  if (arm_arch7a)
+    emit_insn (gen_arm_memory_barrier_v7 (block_scratch, block_unspec));
+  else
+    emit_insn (gen_arm_memory_barrier_v6_explicit(block_scratch,
+                                                  block_unspec, scratch));
   emit_label (XEXP (label2, 0));
 }
 /* APPLE LOCAL end 6258536 atomic builtins */
@@ -14741,7 +14767,7 @@ arm_print_operand (FILE *stream, rtx x, int code)
       }
       return;
 
-    /* APPLE LOCAL 6150859 begin use NEON instructions for SF math */
+    /* APPLE LOCAL begin 6150859 use NEON instructions for SF math */
     /* This code prints the double precision register name starting at
        register number of the indicated single precision register.  */
     case 'p':
@@ -14766,7 +14792,7 @@ arm_print_operand (FILE *stream, rtx x, int code)
 	fprintf (stream, "d%d", (regno - FIRST_VFP_REGNUM) >> 1);
       }
       return;
-    /* APPLE LOCAL 6150859 end use NEON instructions for SF math */
+    /* APPLE LOCAL end 6150859 use NEON instructions for SF math */
 
     /* These two codes print the low/high doubleword register of a Neon quad
        register, respectively.  For pair-structure types, can also print
@@ -23707,10 +23733,14 @@ optimization_options (int level ATTRIBUTE_UNUSED, int size ATTRIBUTE_UNUSED)
   
   /* For -O2 and beyond, turn off -fschedule-insns by default.  It tends to
      make the problem with not enough registers even worse.  */
+  /* LLVM LOCAL begin */
+#ifndef ENABLE_LLVM
 #ifdef INSN_SCHEDULING
   if (level > 1)
     flag_schedule_insns = 0;
 #endif
+#endif
+  /* LLVM LOCAL end */
 
   /* radar 4094534. */
   /* The Darwin libraries never set errno, so we might as well

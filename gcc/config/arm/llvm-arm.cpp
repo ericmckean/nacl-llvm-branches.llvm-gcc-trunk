@@ -140,7 +140,7 @@ static Value *BuildDup(const Type *ResultType, Value *Val,
   assert(VTy && "expected a vector type");
   const Type *ElTy = VTy->getElementType();
   if (Val->getType() != ElTy) {
-    assert(!ElTy->isFloatingPoint() &&
+    assert(!ElTy->isFloatingPointTy() &&
            "only integer types expected to be promoted");
     Val = Builder.CreateTrunc(Val, ElTy);
   }
@@ -1652,7 +1652,7 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
     assert(VTy && "expected a vector type for vset_lane vector operand");
     const Type *ElTy = VTy->getElementType();
     if (Ops[0]->getType() != ElTy) {
-      assert(!ElTy->isFloatingPoint() &&
+      assert(!ElTy->isFloatingPointTy() &&
              "only integer types expected to be promoted");
       Ops[0] = Builder.CreateTrunc(Ops[0], ElTy);
     }
@@ -2560,12 +2560,12 @@ static bool count_num_registers_uses(std::vector<const Type*> &ScalarElts,
         default:
           assert(0);
       }
-    } else if (Ty->isInteger() || isa<PointerType>(Ty) ||
+    } else if (Ty->isIntegerTy() || Ty->isPointerTy() ||
                Ty==Type::getVoidTy(Context)) {
       ;
     } else {
       // Floating point scalar argument.
-      assert(Ty->isFloatingPoint() && Ty->isPrimitiveType() &&
+      assert(Ty->isFloatingPointTy() && Ty->isPrimitiveType() &&
              "Expecting a floating point primitive type!");
       switch (Ty->getTypeID())
       {
@@ -2648,7 +2648,7 @@ static void llvm_arm_extract_mrv_array_element(Value *Src, Value *Dest,
   Idxs[1] = ConstantInt::get(llvm::Type::getInt32Ty(Context), DestFieldNo);
   Idxs[2] = ConstantInt::get(llvm::Type::getInt32Ty(Context), DestElemNo);
   Value *GEP = Builder.CreateGEP(Dest, Idxs, Idxs+3, "mrv_gep");
-  if (isa<VectorType>(STy->getElementType(SrcFieldNo))) {
+  if (STy->getElementType(SrcFieldNo)->isVectorTy()) {
     Value *ElemIndex = ConstantInt::get(Type::getInt32Ty(Context), SrcElemNo);
     Value *EVIElem = Builder.CreateExtractElement(EVI, ElemIndex, "mrv");
     Builder.CreateStore(EVIElem, GEP, isVolatile);

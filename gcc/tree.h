@@ -2782,6 +2782,9 @@ struct tree_field_decl GTY(())
   tree bit_offset;
   tree fcontext;
 
+  /* LLVM LOCAL begin */
+  unsigned llvm_field_index;  /* Field index in llvm struct. */
+  /* LLVM LOCAL end */
 };
 
 /* A numeric unique identifier for a LABEL_DECL.  The UID allocation is
@@ -2864,6 +2867,9 @@ extern void *llvm_get_decl(tree);
 #define SET_DECL_LLVM_INDEX(NODE, INDEX)  \
   (DECL_WRTL_CHECK(NODE)->decl_with_rtl.llvm = INDEX)
 #define GET_DECL_LLVM_INDEX(NODE) (DECL_WRTL_CHECK(NODE)->decl_with_rtl.llvm)
+#define GET_LLVM_FIELD_INDEX(NODE) (FIELD_DECL_CHECK(NODE)->field_decl.llvm_field_index)
+#define SET_LLVM_FIELD_INDEX(NODE, INDEX)                               \
+  (FIELD_DECL_CHECK(NODE)->field_decl.llvm_field_index = INDEX)
 
 /* Returns nonzero if the DECL_LLVM for NODE has already been set.  */
 extern bool llvm_set_decl_p(tree);
@@ -3265,6 +3271,15 @@ struct tree_decl_non_common GTY(())
 #define DECL_DECLARED_INLINE_P(NODE) \
   (FUNCTION_DECL_CHECK (NODE)->function_decl.declared_inline_flag)
 
+/* LLVM LOCAL begin inlinehint attribute */
+/* Nonzero in a FUNCTION_DECL means that this function was explicitly declared
+   inline via the `inline' keyword.  This flag controls the inlinehint attribute
+   passed to the LLVM optimizer.  */
+#define DECL_EXPLICIT_INLINE_P(NODE) \
+  (FUNCTION_DECL_CHECK (NODE)->function_decl.explicit_inline_flag)
+/* LLVM LOCAL end inlinehint attribute */
+
+
 /* For FUNCTION_DECL, this holds a pointer to a structure ("struct function")
    that describes the status of this function.  */
 #define DECL_STRUCT_FUNCTION(NODE) (FUNCTION_DECL_CHECK (NODE)->function_decl.f)
@@ -3312,6 +3327,9 @@ struct tree_function_decl GTY(())
   unsigned no_instrument_function_entry_exit : 1;
   unsigned no_limit_stack : 1;
   ENUM_BITFIELD(built_in_class) built_in_class : 2;
+  /* LLVM LOCAL begin inlinehint attribute */
+  unsigned explicit_inline_flag : 1;
+  /* LLVM LOCAL end inlinehint attribute */
 
   /* APPLE LOCAL DECL_ESTIMATED_INSNS */
   HOST_WIDE_INT estimated_insns;
@@ -4415,6 +4433,8 @@ extern bool empty_body_p (tree);
 /* LLVM LOCAL begin */
 #ifdef ENABLE_LLVM
 extern void llvm_note_type_used(tree);
+extern void llvm_push_TypeUsers(tree);
+extern tree llvm_pop_TypeUsers(void);
 #endif
 /* LLVM LOCAL begin */
 

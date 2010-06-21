@@ -134,6 +134,8 @@ extern GTY(()) int darwin_ms_struct;
 
 #define TARGET_OPTION_TRANSLATE_TABLE \
   { "-all_load", "-Zall_load" },  \
+  /* APPLE LOCAL 7519550 -force_load */ \
+  { "-force_load", "-Zforce_load" },  \
   { "-allowable_client", "-Zallowable_client" },  \
   { "-arch_errors_fatal", "-Zarch_errors_fatal" },  \
   { "-bind_at_load", "-Zbind_at_load" },  \
@@ -257,6 +259,8 @@ do {					\
 #undef  WORD_SWITCH_TAKES_ARG
 #define WORD_SWITCH_TAKES_ARG(STR)              \
   (DEFAULT_WORD_SWITCH_TAKES_ARG (STR) ? 1 :    \
+   /* APPLE LOCAL 7519550 -force_load */ 	\
+   !strcmp (STR, "Zforce_load") ? 1 :     	\
    !strcmp (STR, "Zallowable_client") ? 1 :     \
    !strcmp (STR, "arch") ? 1 :                  \
    !strcmp (STR, "arch_only") ? 1 :             \
@@ -394,8 +398,7 @@ do {					\
      %{Zbundle:-bundle} \
      %{Zbundle_loader*:-bundle_loader %*} \
      %{client_name*} \
-     %{compatibility_version*:%e-compatibility_version only allowed with -dynamiclib\
-} \
+     %{compatibility_version*:%e-compatibility_version only allowed with -dynamiclib} \
      %{current_version*:%e-current_version only allowed with -dynamiclib} \
      %{Zforce_flat_namespace:-force_flat_namespace} \
      %{Zinstall_name*:%e-install_name only allowed with -dynamiclib} \
@@ -416,6 +419,8 @@ do {					\
      %{private_bundle:%e-private_bundle not allowed with -dynamiclib} \
     } \
    %{Zall_load:-all_load} \
+   "/* APPLE LOCAL 7519550 -force_load */" \
+   %{Zforce_load*:-force_load %*} \
    %{Zallowable_client*:-allowable_client %*} \
    %{Zbind_at_load:-bind_at_load} \
    %{Zarch_errors_fatal:-arch_errors_fatal} \
@@ -444,6 +449,11 @@ do {					\
    %{Zmultiplydefinedunused*:-multiply_defined_unused %*} \
    "/* APPLE LOCAL mainline 2007-06-01 5238485 */" \
    %{fpie:-pie} \
+   "/* LLVM LOCAL begin <rdar://problem/7651045> */" \
+   %{fPIE:-pie} \
+   %{fno-pie:-no_pie} \
+   %{fno-PIE:-no_pie} \
+   "/* LLVM LOCAL end <rdar://problem/7651045> */" \
    %{prebind} %{noprebind} %{nofixprebinding} %{prebind_all_twolevel_modules} \
    %{read_only_relocs} \
    %{sectcreate*} %{sectorder*} %{seg1addr*} %{segprot*} \
@@ -698,9 +708,20 @@ do {					\
       char *N = (char *)alloca(strlen(fmt) + 37);                       \
       sprintf(N, fmt, i++);                                             \
       GV->setName(N);                                                   \
+      GV->setAlignment(TARGET_64BIT ? 8 : 4);                           \
     }                                                                   \
   } while (0)
 /* LLVM LOCAL - end radar 6389998 */
+
+/* LLVM LOCAL - begin radar 7291825 */
+/* Give a constant string a sufficient alignment for the platform.  */
+#define TARGET_ADJUST_CSTRING_ALIGN(GV)                                 \
+  do {                                                                  \
+    if (GV->hasInternalLinkage()) {                                     \
+      GV->setAlignment(TARGET_64BIT ? 8 : 4);                           \
+    }                                                                   \
+  } while (0)
+/* LLVM LOCAL - end radar 7291825 */
 
 #endif
 /* LLVM LOCAL end */
