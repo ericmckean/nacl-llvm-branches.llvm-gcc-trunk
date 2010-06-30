@@ -142,8 +142,8 @@ ARM_FUNC_START gnu_Unwind_Restore_VFP
 ARM_FUNC_START gnu_Unwind_Save_VFP
 	/* Use the generic coprocessor form so that gas doesn't complain
 	   on soft-float targets.  */
-        sfi_store_preamble r0, 
-	stc   p11,cr0,[r0],{0x21} /* fstmiax r0, {d0-d15} */
+	tst   r0, #0xc0000000
+	stceq   p11,cr0,[r0],{0x21} /* fstmiax r0, {d0-d15} */
 	RET
 
 /* APPLE LOCAL begin v7 support. Merge from mainline */
@@ -156,8 +156,8 @@ ARM_FUNC_START gnu_Unwind_Restore_VFP_D
 /* Store VFP registers d0-d15 to the address in r0.
    Use this to store in FLDMD format.  */
 ARM_FUNC_START gnu_Unwind_Save_VFP_D
-        sfi_store_preamble r0, 
-	stc   p11,cr0,[r0],{0x20} /* fstmiad r0, {d0-d15} */
+	tst   r0, #0xc0000000
+	stceq   p11,cr0,[r0],{0x20} /* fstmiad r0, {d0-d15} */
 	RET
 
 /* Load VFP registers d16-d31 from the address in r0.
@@ -169,8 +169,8 @@ ARM_FUNC_START gnu_Unwind_Restore_VFP_D_16_to_31
 /* Store VFP registers d16-d31 to the address in r0.
    Use this to store in FLDMD (=VLDM) format.  Needs VFPv3.  */
 ARM_FUNC_START gnu_Unwind_Save_VFP_D_16_to_31
-        sfi_store_preamble r0, 
-	stcl  p11,cr0,[r0],{0x20} /* vstm r0, {d16-d31} */
+	tst   r0, #0xc0000000
+	stceql  p11,cr0,[r0],{0x20} /* vstm r0, {d16-d31} */
 	RET
 
 /* APPLE LOCAL end v7 support. Merge from mainline */
