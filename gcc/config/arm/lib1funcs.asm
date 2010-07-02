@@ -422,6 +422,8 @@ Boston, MA 02110-1301, USA.  */
 
 /* We need to know what prefix to add to function names.  */
 
+#define NACL_HALT         bkpt 0x6666
+
 #ifndef __USER_LABEL_PREFIX__
 #error  __USER_LABEL_PREFIX__ not defined
 #endif
@@ -1675,9 +1677,12 @@ L10:	cmp	ip, #0
 
 	/* LLVM LOCAL mainline */
 	do_push	{r1, lr}
-	mov	r0, #SIGFPE
-  sfi_call_preamble
-	bl	SYM(raise) __PLT__
+#ifdef __native_client__
+	NACL_HALT
+#else
+	mov     r0, #SIGFPE
+	bl      SYM(raise) __PLT__
+#endif
 	/* APPLE LOCAL ARM MACH assembler */
 	RETLDM1 (r1)
 

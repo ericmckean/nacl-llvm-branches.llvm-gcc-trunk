@@ -42,6 +42,13 @@ extern void panic (const char *, ...);
 #endif
 /* APPLE LOCAL end libcc_kext */
 
+#define NACL_HALT         bkpt 0x6666
+/* On NaCl we want to avoid libgcc -> libc dependencies, and signals are
+   not implemented. */
+#ifdef __native_client__
+#define abort() asm ("##NACL_HALT")
+#endif
+
 #ifdef HAVE_GAS_HIDDEN
 #define ATTRIBUTE_HIDDEN  __attribute__ ((__visibility__ ("hidden")))
 #else
