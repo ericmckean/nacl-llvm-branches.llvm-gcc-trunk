@@ -27,9 +27,12 @@
    Boston, MA 02110-1301, USA.  */
 #include "unwind.h"
 
-/* We add a prototype for abort here to avoid creating a dependency on
-   target headers.  */
-extern void abort (void);
+# define NACL_HALT         bkpt 0x6666
+/* On NaCl we want to avoid libgcc -> libc dependencies, and signals are
+   not implemented. */
+#ifdef __native_client__
+#define abort() asm ("##NACL_HALT")
+#endif
 
 /* Definitions for C++ runtime support routines.  We make these weak
    declarations to avoid pulling in libsupc++ unnecessarily.  */
