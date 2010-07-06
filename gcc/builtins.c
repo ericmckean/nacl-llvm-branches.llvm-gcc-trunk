@@ -4377,9 +4377,13 @@ pnacl_gimplify_va_arg_expr (tree valist, tree type, tree *pre_p, tree *post_p)
   /* Take the address: despite the syntax, the va_list is really being
      passed by reference with the intent of modification.
   */
-  valist = build1 (ADDR_EXPR,  
-                   build_pointer_type (TREE_TYPE (valist)),
-                   valist); 
+
+  /* if the tree code is an ARRAY_TYPE, gimplify_va_arg_expr has already
+     taken the address before calling us. */
+  if (TREE_CODE (va_list_type_node) != ARRAY_TYPE)
+    valist = build1 (ADDR_EXPR,
+		     build_pointer_type (TREE_TYPE (valist)),
+		     valist);
   valist = tree_cons (NULL_TREE, valist, NULL);
   expr = build_function_call_expr (
       implicit_built_in_decls[BUILT_IN_VA_ARG], valist);
