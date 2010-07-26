@@ -20,11 +20,19 @@ llvm-g++  [\fB\-c\fR|\fB\-S\fR|\fB\-E\fR] [\fB\-std=\fR\fIstandard\fR]
           [\fB\-f\fR\fIoption\fR...] [\fB\-m\fR\fImachine-option\fR...]
           [\fB\-o\fR \fIoutfile\fR] \fIinfile\fR...
 .Sh DESCRIPTION
-llvm-gcc is a C, C++, Objective-C and Objective-C++ compiler. llvm-g++ is a compiler driver for C++. llvm-gcc uses gcc front-end and gcc's command line interface. Consult the cc(1) man page for command line options supported by llvm-gcc. Only selected LLVM specific options are listed here.
+llvm-gcc is a C, C++, Objective-C and Objective-C++ compiler. llvm-g++ is a compiler driver for C++. llvm-gcc uses gcc front-end and gcc's command line interface. Consult the cc(1) man page for command line options supported by llvm-gcc. llvm-gcc does not support #pragma optimization_level supported by Darwin gcc. Only selected LLVM specific options are listed here.
 .Pp
 .Bl -tag -width -indent
 .It Fl flto
-Enables Link Time Optimization. Link Time Optimization is performed by ld(1) transparently using the LLVM optimizer. The object file generated contains intermediate LLVM bitcode instead of Mach-O objects. This option disables debugging information.
+Enables Link Time Optimization. Link Time Optimization is performed by ld(1) transparently using the LLVM optimizer. The object file generated contains intermediate LLVM bitcode instead of Mach-O objects.
+.It Fl fno-honor-nans
+Allow optimizations for floating-point arithmetic that assume that arguments and results are not NaNs.
+
+The default is -fhonor-nans.
+.It Fl fno-honor-infinites
+Allow optimizations for floating-point arithmetic that assume that arguments and results are not +-Infs.
+
+The default is -fhonor-infinites.
 .It Fl O4
 Enables Link Time Optimization in addition to all optimizations enabled at -O3.
 .It Fl O

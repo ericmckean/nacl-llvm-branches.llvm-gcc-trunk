@@ -3927,31 +3927,42 @@ enum ix86_builtins
    the string extracted from the magic symbol built for that register, rather
    than reg_names.  The latter maps both AH and AL to the same thing, which
    means we can't distinguish them. */
-#define LLVM_GET_REG_NAME(REG_NAME, REG_NUM) \
-  ((REG_NAME) + (*(REG_NAME) == '%' ? 1 : 0))
+#define LLVM_GET_REG_NAME(REG_NAME, REG_NUM) __extension__ \
+  ({ const char *nm = (REG_NAME); \
+     if (nm && (*nm == '%' || *nm == '#')) ++nm; \
+     ((!nm || ISDIGIT (*nm)) ? reg_names[REG_NUM] : nm); })
 
 /* Propagate code model setting to backend */
-#define LLVM_SET_MACHINE_OPTIONS(argvec)	   \
-  switch (ix86_cmodel) {			   \
-  default:                                         \
-    sorry ("code model %<%s%> not supported yet", ix86_cmodel_string);  \
-    break;                                         \
-  case CM_SMALL:				   \
-  case CM_SMALL_PIC:				   \
-    argvec.push_back("--code-model=small");	   \
-    break;					   \
-  case CM_KERNEL:				   \
-    argvec.push_back("--code-model=kernel");	   \
-    break;					   \
-  case CM_MEDIUM:				   \
-  case CM_MEDIUM_PIC:				   \
-    argvec.push_back("--code-model=medium");	   \
-    break;					   \
-  case CM_32:					   \
-    argvec.push_back("--code-model=default");	   \
-    break;					   \
-  }
-
+#define LLVM_SET_MACHINE_OPTIONS(argvec)                \
+  do {                                                  \
+    switch (ix86_cmodel) {                              \
+    default:                                            \
+      sorry ("code model %<%s%> not supported yet",     \
+             ix86_cmodel_string);                       \
+      break;                                            \
+    case CM_SMALL:                                      \
+    case CM_SMALL_PIC:                                  \
+      argvec.push_back("--code-model=small");           \
+      break;                                            \
+    case CM_KERNEL:                                     \
+      argvec.push_back("--code-model=kernel");          \
+      break;                                            \
+    case CM_MEDIUM:                                     \
+    case CM_MEDIUM_PIC:                                 \
+      argvec.push_back("--code-model=medium");          \
+      break;                                            \
+    case CM_32:                                         \
+      argvec.push_back("--code-model=default");         \
+      break;                                            \
+    }                                                   \
+    /* A value of 3 in flag_omit_frame_pointer implies  \
+       omitting leaf frame pointers only.  */           \
+    if (flag_omit_frame_pointer == 3)                   \
+      argvec.push_back("--disable-non-leaf-fp-elim");   \
+                                                        \
+    if (ix86_force_align_arg_pointer)                   \
+      argvec.push_back("-realign-stack");               \
+  } while (0)
 #endif /* ENABLE_LLVM */
 /* LLVM LOCAL end */
 

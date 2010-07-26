@@ -33,6 +33,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/PrettyStackTrace.h"
+#include "llvm/Support/IRBuilder.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetRegistry.h"
@@ -58,8 +59,6 @@ void dummy_function() {
   llvm::createCFGSimplificationPass();
 
   llvm::createDefaultScheduler(NULL, llvm::CodeGenOpt::Default);
-  llvm::createLinearScanRegisterAllocator();
-  llvm::createLocalRegisterAllocator();
 
   llvm::createGVNPass();
   llvm::createLoopRotatePass();
@@ -93,10 +92,13 @@ void dummy_function() {
   
   llvm::Type::getInt8Ty(llvm::getGlobalContext());
 
-  llvm::PrettyStackTraceProgram::PrettyStackTraceProgram(0, 0);
-  llvm::DIFactory::DIFactory(*static_cast<llvm::Module *>(0));
+  llvm::PrettyStackTraceProgram(0, 0);
+  llvm::DIFactory(*static_cast<llvm::Module *>(0));
   std::string Err;
   llvm::TargetRegistry::lookupTarget("", Err);
+
+  llvm::IRBuilder<> * volatile X;
+  X->getCurrentFunctionReturnType();
 }
 
 /* LLVM LOCAL end (ENTIRE FILE!)  */
