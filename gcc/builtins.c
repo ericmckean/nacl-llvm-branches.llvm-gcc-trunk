@@ -4368,7 +4368,7 @@ pnacl_gimplify_va_arg_expr (tree valist, tree type, tree *pre_p, tree *post_p)
   tree expr;
 
   if (flag_expand_va_arg)
-    return std_gimplify_va_arg_expr(valist, type, pre_p, post_p);
+    return targetm.gimplify_va_arg_expr (valist, type, pre_p, post_p);
 
   /* -fnoexpand_va_arg was specified.  Don't expand the VA_ARG
      operator, but turn it back into a call to an external
@@ -4508,7 +4508,7 @@ gimplify_va_arg_expr (tree *expr_p, tree *pre_p, tree *post_p)
 	   assert this is non-null.  */
 	return GS_ALL_DONE;
 
-      *expr_p = targetm.gimplify_va_arg_expr (valist, type, pre_p, post_p);
+      *expr_p = pnacl_gimplify_va_arg_expr (valist, type, pre_p, post_p);
       return GS_OK;
     }
 }
