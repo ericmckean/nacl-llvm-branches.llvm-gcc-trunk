@@ -22,7 +22,7 @@ MULTILIB_OSDIRNAMES = ../lib64 $(if $(wildcard $(shell echo $(SYSTEM_HEADER_DIR)
 LIBGCC = stmp-multilib
 INSTALL_LIBGCC = install-multilib
 
-EXTRA_MULTILIB_PARTS=crtbegin.o crtend.o crtbeginS.o crtendS.o \
+EXTRA_MULTILIB_PARTS=crtbegin.o crtend.o \
 		     crtbeginT.o crtfastmath.o
 
 # The pushl in CTOR initialization interferes with frame pointer elimination.
