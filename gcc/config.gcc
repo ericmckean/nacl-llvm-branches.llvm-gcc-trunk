@@ -264,7 +264,7 @@ strongarm*-*-*)
 arm*-*-*)
 	cpu_type=arm
         # APPLE LOCAL ARM v7 support, merge from Codesourcery.
-	extra_headers="mmintrin.h arm_neon.h"
+	extra_headers="mmintrin.h arm_neon.h arm_neon_std.h arm_neon_gcc.h"
 # LLVM LOCAL begin
 	out_cxx_file=arm/llvm-arm.cpp
 # LLVM LOCAL end                               
@@ -430,8 +430,7 @@ case ${target} in
   tm_p_file="${tm_p_file} darwin-protos.h"
   # APPLE LOCAL 5681645
   tmake_file="t-darwin ${cpu_type}/t-darwin"
-  # LLVM LOCAL put va_opt in GC memory 7210265
-  target_gtfiles="\$(srcdir)/config/darwin.c \$(srcdir)/config/darwin-c.c"
+  target_gtfiles="\$(srcdir)/config/darwin.c"
   extra_options="${extra_options} darwin.opt"
   c_target_objs="darwin-c.o"
   cxx_target_objs="darwin-c.o"
@@ -823,7 +822,7 @@ arm*-*-darwin*)
 	extra_options="${extra_options} arm/darwin.opt"
         tm_file="${tm_file} arm/darwin.h"
         tmake_file="${tmake_file} arm/t-slibgcc-iphoneos"
-	extra_headers="arm_neon.h"
+	extra_headers="arm_neon.h arm_neon_std.h arm_neon_gcc.h"
         ;;
 # APPLE LOCAL end ARM darwin target
 arm*-wince-pe*)

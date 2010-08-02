@@ -2081,7 +2081,8 @@ override_options (void)
   if (flag_omit_frame_pointer)
     target_flags &= ~MASK_OMIT_LEAF_FRAME_POINTER;
   else if (TARGET_OMIT_LEAF_FRAME_POINTER)
-    flag_omit_frame_pointer = 1;
+    /* LLVM LOCAL - Use '3' to indicate omitting leaf FPs only  */
+    flag_omit_frame_pointer = 3;
 
   /* If we're doing fast math, we don't care about comparison order
      wrt NaNs.  This lets us use a shorter comparison sequence.  */
@@ -22877,8 +22878,9 @@ iasm_x86_canonicalize_operands (const char **opcode_p, tree iargs, void *ep)
 	   || strcasecmp (opcode, "str") == 0
 	   || strcasecmp (opcode, "xlat") == 0)
     e->mod[0] = 0;
-  else if (strcasecmp (opcode, "rcr") == 0
+  else if (strcasecmp (opcode, "lea") == 0
 	   || strcasecmp (opcode, "rcl") == 0
+	   || strcasecmp (opcode, "rcr") == 0
 	   || strcasecmp (opcode, "rol") == 0
 	   || strcasecmp (opcode, "ror") == 0
 	   || strcasecmp (opcode, "sal") == 0

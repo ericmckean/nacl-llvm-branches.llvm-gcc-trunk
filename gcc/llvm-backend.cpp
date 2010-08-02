@@ -52,7 +52,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "llvm/System/Program.h"
 
 #include <cassert>
-#undef VISIBILITY_HIDDEN
 extern "C" {
 #include "config.h"
 #include "system.h"
@@ -92,6 +91,9 @@ TargetMachine *TheTarget = 0;
 TargetFolder *TheFolder = 0;
 TypeConverter *TheTypeConverter = 0;
 
+// A list of thunks to post-process.
+std::vector<tree> Thunks;
+
 /// DisableLLVMOptimizations - Allow the user to specify:
 /// "-mllvm -disable-llvm-optzns" on the llvm-gcc command line to force llvm
 /// optimizations off.
@@ -122,8 +124,8 @@ static void destroyOptimizationPasses();
 // than the LLVM Value pointer while using PCH.
 
 // Collection of LLVM Values
-static std::vector<Value *> LLVMValues;
-typedef DenseMap<Value *, unsigned> LLVMValuesMapTy;
+static std::vector<Value*> LLVMValues;
+typedef DenseMap<Value*, unsigned> LLVMValuesMapTy;
 static LLVMValuesMapTy LLVMValuesMap;
 
 /// LocalLLVMValueIDs - This is the set of local IDs we have in our mapping,
@@ -266,6 +268,17 @@ void readLLVMValues() {
 
   // Now, llvm.pch.values is not required so remove it from the symbol table.
   GV->eraseFromParent();
+
+  if (TheDebugInfo) {
+    // Replace compile unit received from the PCH file.
+    NamedMDNode *NMD = TheModule->getOrInsertNamedMetadata("llvm.dbg.pch.cu");
+    if (NMD->getNumOperands() == 1) {
+      MDNode *HeaderCUNode = NMD->getOperand(0);
+      Value *CUNode = TheDebugInfo->getCU();
+      HeaderCUNode->replaceAllUsesWith(CUNode);
+    }
+    TheDebugInfo->replaceBasicTypesFromPCH();
+  }
 }
 
 /// writeLLVMValues - GCC tree's uses LLVMValues vector's index to reach LLVM
@@ -296,6 +309,11 @@ void writeLLVMValues() {
                      GlobalValue::ExternalLinkage,
                      LLVMValuesTable,
                      "llvm.pch.values");
+
+  if (TheDebugInfo && TheDebugInfo->getCU().Verify()) {
+    NamedMDNode *NMD = TheModule->getOrInsertNamedMetadata("llvm.dbg.pch.cu");
+    NMD->addOperand(TheDebugInfo->getCU());
+  }
 }
 
 /// eraseLocalLLVMValues - drop all non-global values from the LLVM values map.
@@ -393,8 +411,10 @@ void llvm_initialize_backend(void) {
     Args.push_back("--time-passes");
   if (fast_math_flags_set_p())
     Args.push_back("--enable-unsafe-fp-math");
-  if (flag_finite_math_only)
-    Args.push_back("--enable-finite-only-fp-math");
+  if (!flag_honor_infinites)
+    Args.push_back("--enable-no-infs-fp-math");
+  if (!flag_honor_nans)
+    Args.push_back("--enable-no-nans-fp-math");
   if (!flag_omit_frame_pointer)
     Args.push_back("--disable-fp-elim");
   if (!flag_zero_initialized_in_bss)
@@ -409,6 +429,12 @@ void llvm_initialize_backend(void) {
     Args.push_back("--unwind-tables");
   if (!flag_schedule_insns)
     Args.push_back("--pre-RA-sched=source");
+  if (flag_function_sections)
+    Args.push_back("--ffunction-sections");
+  if (flag_data_sections)
+    Args.push_back("--fdata-sections");
+  if (flag_disable_debug_info_print)
+    Args.push_back("--disable-debug-info-print");
 
   // If there are options that should be passed through to the LLVM backend
   // directly from the command line, do so now.  This is mainly for debugging
@@ -454,7 +480,7 @@ void llvm_initialize_backend(void) {
   // If the target wants to override the architecture, e.g. turning
   // powerpc-darwin-... into powerpc64-darwin-... when -m64 is enabled, do so
   // now.
-  std::string TargetTriple = TARGET_NAME;
+  std::string TargetTriple = TARGET_CANONICAL_NAME;
 #ifdef LLVM_OVERRIDE_TARGET_ARCH
   std::string Arch = LLVM_OVERRIDE_TARGET_ARCH();
   if (!Arch.empty()) {
@@ -503,25 +529,15 @@ void llvm_initialize_backend(void) {
   TheModule->setDataLayout(TheTarget->getTargetData()->
                            getStringRepresentation());
 
-  if (optimize)
-    RegisterRegAlloc::setDefault(createLinearScanRegisterAllocator);
-  else
-    RegisterRegAlloc::setDefault(createLocalRegisterAllocator);
-
-  // FIXME - Do not disable debug info while writing pch.
-  if (!flag_pch_file &&
-      debug_info_level > DINFO_LEVEL_NONE)
+  if (debug_info_level > DINFO_LEVEL_NONE)
     TheDebugInfo = new DebugInfo(TheModule);
+  else
+    TheDebugInfo = 0;
 }
 
 /// performLateBackendInitialization - Set backend options that may only be
 /// known at codegen time.
 void performLateBackendInitialization(void) {
-  // The Ada front-end sets flag_exceptions only after processing the file.
-  if (USING_SJLJ_EXCEPTIONS)
-    SjLjExceptionHandling = flag_exceptions;
-  else
-    DwarfExceptionHandling = flag_exceptions;
   for (Module::iterator I = TheModule->begin(), E = TheModule->end();
        I != E; ++I)
     if (!I->isDeclaration()) {
@@ -560,8 +576,7 @@ void llvm_pch_read(const unsigned char *Buffer, unsigned Size) {
   TheModule = ParseBitcodeFile(MB, getGlobalContext(), &ErrMsg);
   delete MB;
 
-  // FIXME - Do not disable debug info while writing pch.
-  if (!flag_pch_file && debug_info_level > DINFO_LEVEL_NONE) {
+  if (debug_info_level > DINFO_LEVEL_NONE) {
     TheDebugInfo = new DebugInfo(TheModule);
     TheDebugInfo->Initialize();
   }
@@ -849,6 +864,47 @@ void llvm_asm_file_end(void) {
   timevar_push(TV_LLVM_PERFILE);
   LLVMContext &Context = getGlobalContext();
 
+  // Assign the correct linkage to the thunks now that we've set the linkage and
+  // visibility to their targets.
+  SmallPtrSet<tree, 4> ThunkOfThunk;
+
+  for (std::vector<tree>::iterator
+         I = Thunks.begin(), E = Thunks.end(); I != E; ++I) {
+    tree thunk = *I;
+    tree thunk_target = lang_hooks.thunk_target(thunk);
+
+    if (lang_hooks.function_is_thunk_p (thunk_target)) {
+      ThunkOfThunk.insert(thunk);
+      continue;
+    }
+
+    Function *Thunk = cast<Function>(DECL_LLVM(thunk));
+    const Function *ThunkTarget = cast<Function>(DECL_LLVM(thunk_target));
+
+    Thunk->setLinkage(ThunkTarget->getLinkage());
+    Thunk->setVisibility(ThunkTarget->getVisibility());
+  }
+
+  // There's a situation where a thunk calls another thunk. In that case, we
+  // want to process first the thunk that calls a non-thunk. Then we process
+  // each thunk in turn until all thunks have been processed.
+  while (!ThunkOfThunk.empty())
+    for (SmallPtrSet<tree, 4>::iterator
+           I = ThunkOfThunk.begin(), E = ThunkOfThunk.end(); I != E; ++I) {
+      tree thunk = *I;
+      tree thunk_target = lang_hooks.thunk_target(thunk);
+
+      if (!ThunkOfThunk.count(thunk_target)) {
+        Function *Thunk = cast<Function>(DECL_LLVM(thunk));
+        const Function *ThunkTarget = cast<Function>(DECL_LLVM(thunk_target));
+
+        Thunk->setLinkage(ThunkTarget->getLinkage());
+        Thunk->setVisibility(ThunkTarget->getVisibility());
+        ThunkOfThunk.erase(thunk);
+        break;
+      }
+    }
+
   performLateBackendInitialization();
   createPerFunctionOptimizationPasses();
 
@@ -975,6 +1031,9 @@ void llvm_asm_file_end(void) {
 // llvm_call_llvm_shutdown - Release LLVM global state.
 void llvm_call_llvm_shutdown(void) {
 #ifndef NDEBUG
+  delete PerModulePasses;
+  delete PerFunctionPasses;
+  delete CodeGenPasses;
   delete TheModule;
   llvm_shutdown();
 #endif
@@ -1007,7 +1066,8 @@ void llvm_emit_code_for_current_function(tree fndecl) {
   // Convert the AST to raw/ugly LLVM code.
   Function *Fn;
   {
-    TreeToLLVM Emitter(fndecl);
+    TreeToLLVM *Emitter = new TreeToLLVM(fndecl);
+    // FIXME: should we store TheTreeToLLVM right here (current in constructor)?
     enum symbol_visibility vis = DECL_VISIBILITY (fndecl);
 
     if (vis != VISIBILITY_DEFAULT)
@@ -1015,7 +1075,8 @@ void llvm_emit_code_for_current_function(tree fndecl) {
       // visibility that's not supported by the target.
       targetm.asm_out.visibility(fndecl, vis);
 
-    Fn = Emitter.EmitFunction();
+    Fn = TheTreeToLLVM->EmitFunction();
+    Emitter->~TreeToLLVM();
   }
 
 #if 0
@@ -1106,6 +1167,8 @@ void emit_alias_to_llvm(tree decl, tree target, tree target_decl) {
     Linkage = GlobalValue::PrivateLinkage;
   else if (DECL_LLVM_LINKER_PRIVATE(decl))
     Linkage = GlobalValue::LinkerPrivateLinkage;
+  else if (DECL_LLVM_LINKER_PRIVATE_WEAK(decl))
+    Linkage = GlobalValue::LinkerPrivateWeakLinkage;
   else if (DECL_WEAK(decl))
     // The user may have explicitly asked for weak linkage - ignore flag_odr.
     Linkage = GlobalValue::WeakAnyLinkage;
@@ -1372,6 +1435,9 @@ void emit_global_to_llvm(tree decl) {
   } else if (CODE_CONTAINS_STRUCT (TREE_CODE (decl), TS_DECL_WITH_VIS)
              && DECL_LLVM_LINKER_PRIVATE(decl)) {
     Linkage = GlobalValue::LinkerPrivateLinkage;
+  } else if (CODE_CONTAINS_STRUCT (TREE_CODE (decl), TS_DECL_WITH_VIS)
+             && DECL_LLVM_LINKER_PRIVATE_WEAK(decl)) {
+    Linkage = GlobalValue::LinkerPrivateWeakLinkage;
   } else if (!TREE_PUBLIC(decl)) {
     Linkage = GlobalValue::InternalLinkage;
   } else if (DECL_WEAK(decl)) {
@@ -1440,7 +1506,8 @@ void emit_global_to_llvm(tree decl) {
 
     // Handle used decls
     if (DECL_PRESERVE_P (decl)) {
-      if (DECL_LLVM_LINKER_PRIVATE (decl))
+      if (DECL_LLVM_LINKER_PRIVATE (decl) ||
+          DECL_LLVM_LINKER_PRIVATE_WEAK (decl))
         AttributeCompilerUsedGlobals.insert(GV);
       else
         AttributeUsedGlobals.insert(GV);
