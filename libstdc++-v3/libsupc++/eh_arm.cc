@@ -146,11 +146,18 @@ __gnu_end_cleanup(void)
   return &header->unwindHeader;
 }
 
+extern "C" void abort(void);
 // @LOCALMOD
 // TODO(robertm): this now cliobbers the register
 #if 1
 extern "C" void __cxa_end_cleanup(void) {
+#ifdef __native_client__
+      // TODO(espindola): figure out how we are going to handle exceptions on
+      // native client.
+      abort();
+#else
   _Unwind_Resume(__gnu_end_cleanup());
+#endif
 }
 
 #else
