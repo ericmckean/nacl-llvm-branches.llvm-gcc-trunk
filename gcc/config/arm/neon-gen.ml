@@ -32,7 +32,7 @@
      ocamlc -o neon-gen neon.cmo neon-gen.ml
 
    Run with:
-     ./neon-gen > arm_neon.h
+     ./neon-gen > arm_neon_gcc.h
 *)
 
 open Neon
@@ -93,15 +93,16 @@ let print_function arity fnname body =
   | Arity4 (ret, arg0, arg1, arg2, arg3) ->
       Format.printf "%s(__a, __b, __c, __d)" fnname
   end;
-  Format.printf " \\@,";
   let rec print_lines = function
     [] -> ()
   | [line] -> Format.printf "%s; \\" line
   | line::lines -> Format.printf "%s; \\@," line; print_lines lines in
   let print_macro_body = function
-    [] -> ()
-  | [line] -> Format.printf "%s" line
-  | line::lines -> Format.printf "@[<v 3>({ \\@,%s; \\@," line;
+    [] -> Format.printf " \\@,";
+  | [line] -> Format.printf " \\@,";
+              Format.printf "%s" line
+  | line::lines -> Format.printf " __extension__ \\@,";
+                   Format.printf "@[<v 3>({ \\@,%s; \\@," line;
                    print_lines lines;
                    Format.printf "@]@, })" in
   print_macro_body body;
@@ -135,34 +136,28 @@ let rec signed_ctype = function
   | x -> x
 
 (* LLVM LOCAL begin union_string.
-   Array types are handled as structs in llvm-gcc, not as wide integers, and
-   single vector types have wrapper structs.  Unions are used here to convert
+   Array types are handled as structs in llvm-gcc, not as wide integers.
+   Unions are used here to convert
    back and forth between these different representations.  The union_string
    function has been updated accordingly, and it is moved below signed_ctype
    so it can use that function.  *)
 let union_string num elts base =
-  let itype = match num with
-    1 -> elts
-  | _ -> T_arrayof (num, elts) in
+  let itype = T_arrayof (num, elts) in
   let iname = string_of_vectype (signed_ctype itype)
   and sname = string_of_vectype itype in
   Printf.sprintf "union { %s __i; __neon_%s __o; } %s" sname iname base
 (* LLVM LOCAL end union_string.  *)
 
-(* LLVM LOCAL begin add_cast_with_prefix.  *)
-let add_cast_with_prefix ctype cval stype_prefix =
+let add_cast ctype cval =
   let stype = signed_ctype ctype in
   if ctype <> stype then
     match stype with
       T_ptrto elt ->
-        Printf.sprintf "__neon_ptr_cast(%s%s, %s)" stype_prefix (string_of_vectype stype) cval
+        Printf.sprintf "__neon_ptr_cast(%s, %s)" (string_of_vectype stype) cval
     | _ ->
-        Printf.sprintf "(%s%s) %s" stype_prefix (string_of_vectype stype) cval
+        Printf.sprintf "(%s) %s" (string_of_vectype stype) cval
   else
     cval
-
-let add_cast ctype cval = add_cast_with_prefix ctype cval ""
-(* LLVM LOCAL end add_cast_with_prefix.  *)
 
 let cast_for_return to_ty = "(" ^ (string_of_vectype to_ty) ^ ")"
 
@@ -182,21 +177,6 @@ let return arity return_by_ptr thing =
         else
           let uname = union_string num vec "__rv" in
           [uname], ["__rv.__o = " ^ thing; "__rv.__i"]
-    (* LLVM LOCAL begin Convert vector result to wrapper struct. *)
-    | T_int8x8    | T_int8x16
-    | T_int16x4   | T_int16x8
-    | T_int32x2   | T_int32x4
-    | T_int64x1   | T_int64x2
-    | T_uint8x8   | T_uint8x16
-    | T_uint16x4  | T_uint16x8
-    | T_uint32x2  | T_uint32x4
-    | T_uint64x1  | T_uint64x2
-    | T_float32x2 | T_float32x4
-    | T_poly8x8   | T_poly8x16
-    | T_poly16x4  | T_poly16x8 ->
-        let uname = union_string 1 ret "__rv" in
-        [uname], ["__rv.__o = " ^ thing; "__rv.__i"]
-    (* LLVM LOCAL end Convert vector result to wrapper struct. *)
     | T_void -> [], [thing]
     | _ ->
         [], [(cast_for_return ret) ^ thing]
@@ -217,29 +197,7 @@ let params return_by_ptr ps =
         let decl = Printf.sprintf "%s = { %s }" uname p in
         pdecls := decl :: !pdecls;
         p ^ "u.__o"
-    (* LLVM LOCAL begin Extract vector operand from wrapper struct. *)
-    | T_int8x8    | T_int8x16
-    | T_int16x4   | T_int16x8
-    | T_int32x2   | T_int32x4
-    | T_int64x1   | T_int64x2
-    | T_uint8x8   | T_uint8x16
-    | T_uint16x4  | T_uint16x8
-    | T_uint32x2  | T_uint32x4
-    | T_uint64x1  | T_uint64x2
-    | T_float32x2 | T_float32x4
-    | T_poly8x8   | T_poly8x16
-    | T_poly16x4  | T_poly16x8 ->
-        let decl = Printf.sprintf "%s %s = %s"
-          (string_of_vectype t) (p ^ "x") p in
-        pdecls := decl :: !pdecls;
-        add_cast_with_prefix t (p ^ "x.val") "__neon_"
-    | T_immediate (lo, hi) -> p
-    | _ ->
-        let decl = Printf.sprintf "%s %s = %s"
-          (string_of_vectype t) (p ^ "x") p in
-        pdecls := decl :: !pdecls;
-        add_cast t (p ^ "x") in
-    (* LLVM LOCAL end Extract vector operand from wrapper struct. *)
+    | _ -> add_cast t p in
   let plist = match ps with
     Arity0 _ -> []
   | Arity1 (_, t1) -> [ptype t1 "__a"]
@@ -381,36 +339,19 @@ let deftypes () =
     "__builtin_neon_usi", "uint", 32, 4;
     "__builtin_neon_udi", "uint", 64, 2
   ] in
-  List.iter
-    (fun (cbase, abase, esize, enum) ->
-      let attr =
-        match enum with
-        (* LLVM LOCAL no special case for enum == 1 so int64x1_t is a vector *)
-          _ -> Printf.sprintf "\t__attribute__ ((__vector_size__ (%d)))"
-                              (esize * enum / 8) in
-      (* LLVM LOCAL Add "__neon_" prefix. *)
-      Format.printf "typedef %s __neon_%s%dx%d_t%s;@\n" cbase abase esize enum attr)
-    typeinfo;
-  Format.print_newline ();
+  (* LLVM LOCAL remove typedefs for builtin Neon vector types *)
   (* Extra types not in <stdint.h>.  *)
   Format.printf "typedef __builtin_neon_sf float32_t;\n";
   Format.printf "typedef __builtin_neon_poly8 poly8_t;\n";
   Format.printf "typedef __builtin_neon_poly16 poly16_t;\n"
 (* LLVM LOCAL begin Define containerized vector types. *)
   ;
+  Format.print_newline ();
   List.iter
     (fun (cbase, abase, esize, enum) ->
       let typename =
         Printf.sprintf "%s%dx%d_t" abase esize enum in
-      let structname =
-        Printf.sprintf "__simd%d_%s%d_t" (esize * enum) abase esize in
-      let sfmt = start_function () in
-      Format.printf "typedef struct %s" structname;
-      open_braceblock sfmt;
-      Format.printf "__neon_%s val;" typename;
-      close_braceblock sfmt;
-      Format.printf " %s;" typename;
-      end_function sfmt)
+      Format.printf "typedef __neon_%s %s;\n" typename typename)
     typeinfo
 (* LLVM LOCAL end Define containerized vector types. *)
 
@@ -451,10 +392,12 @@ let print_lines = List.iter (fun s -> Format.printf "%s@\n" s)
 
 let _ =
   print_lines [
-"/* LLVM LOCAL file Changed to use preprocessor macros.  */";
-"/* APPLE LOCAL file v7 support. Merge from Codesourcery */";
-"/* ARM NEON intrinsics include file. This file is generated automatically";
-"   using neon-gen.ml.  Please do not edit manually.";
+"/* Internal definitions for GCC-compatible NEON types and intrinsics.";
+"   Do not include this file directly; please use <arm_neon.h> and define";
+"   the ARM_NEON_GCC_COMPATIBILITY macro.";
+"";
+"   This file is generated automatically using neon-gen.ml.";
+"   Please do not edit manually.";
 "";
 "   Copyright (C) 2006, 2007 Free Software Foundation, Inc.";
 "   Contributed by CodeSourcery.";

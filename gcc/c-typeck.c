@@ -1692,8 +1692,10 @@ perform_integral_promotions (tree exp)
 tree
 default_conversion (tree exp)
 {
+  /* LLVM LOCAL begin */
   tree orig_exp;
-  tree type = TREE_TYPE (exp);
+  tree type = TREE_TYPE (exp), promoted_type;
+  /* LLVM LOCAL end */
   enum tree_code code = TREE_CODE (type);
 
   /* Functions and arrays have been converted during parsing.  */
@@ -1720,6 +1722,12 @@ default_conversion (tree exp)
 
   if (TREE_NO_WARNING (orig_exp))
     TREE_NO_WARNING (exp) = 1;
+
+  /* LLVM LOCAL begin */
+  promoted_type = targetm.type_promotes_to (type);
+  if (promoted_type != NULL_TREE)
+    return convert (promoted_type, exp);
+  /* LLVM LOCAL end */
 
   if (INTEGRAL_TYPE_P (type))
     return perform_integral_promotions (exp);
@@ -2129,6 +2137,14 @@ build_array_ref (tree array, tree index)
             || TREE_CODE(ty) == QUAL_UNION_TYPE)
           ty = TYPE_MAIN_VARIANT (ty);
 
+        if (TYPE_SIZE_UNIT (ty) == 0) {
+          /* We don't know the size of the array elements, so we can't
+             index it.  Invoke the usual GCC routine; it will diagnose
+             the error and return a tree that won't ICE.  */
+          return build_indirect_ref (build_binary_op (PLUS_EXPR, ar, index, 0),
+                                     "array indexing");
+        }
+
         ar = build4 (ARRAY_REF, ty, ar, index, NULL_TREE, NULL_TREE);
         /* Mirror logic from build_indirect_ref to set TREE_THIS_VOLATILE and
          * other flags.
@@ -2146,6 +2162,7 @@ build_array_ref (tree array, tree index)
 				 "array indexing");
     }
 }
+
 
 /* Build an external reference to identifier ID.  FUN indicates
    whether this will be used for a function call.  LOC is the source
@@ -2209,9 +2226,14 @@ build_external_ref (tree id, int fun, location_t loc)
 	    {
 	      /* APPLE LOCAL begin radar 5803600 (C++ ci) */
 	      /* byref globals are directly accessed. */
-	      if (!gdecl)
+              /* APPLE LOCAL begin radar 7760213 */
+	      if (!gdecl) {
+                if (HasByrefArray(TREE_TYPE (decl)))
+       		  error ("cannot access __block variable of array type inside block");
 		/* build a decl for the byref variable. */
 		decl = build_block_byref_decl (id, decl, decl);
+              }
+              /* APPLE LOCAL end radar 7760213 */
 	      else
 		add_block_global_byref_list (decl);
 	    }
@@ -7776,6 +7798,10 @@ static tree
 c_finish_block_return_stmt (tree retval)
 {
   tree valtype;
+  /* APPLE LOCAL begin radar 7901648 */
+  if (retval == error_mark_node)
+    return error_mark_node;
+  /* APPLE LOCAL end radar 7901648 */
   /* If this is the first return we've seen in the block, infer the type of
      the block from it. */
   if (cur_block->return_type == NULL_TREE)

@@ -1258,6 +1258,13 @@ gimplify_decl_expr (tree *stmt_p)
 
 	  args = tree_cons (NULL, DECL_SIZE_UNIT (decl), NULL);
 	  t = built_in_decls[BUILT_IN_ALLOCA];
+	  /* LLVM LOCAL begin add alloca alignment */
+    /* We may have specified an alignment on the alloca - store it on the
+       function call so that we can emit this later and not lose it.  */
+    DECL_USER_ALIGN (t) = DECL_USER_ALIGN (decl);
+    DECL_ALIGN(t) = DECL_ALIGN(decl);
+	  /* LLVM LOCAL end add alloca alignment */
+	  
 	  t = build_function_call_expr (t, args);
 	  t = fold_convert (ptr_type, t);
 	  t = build2 (MODIFY_EXPR, void_type_node, addr, t);
@@ -3097,8 +3104,15 @@ gimplify_init_constructor (tree *expr_p, tree *pre_p,
 		TREE_STATIC (new) = 1;
 		TREE_READONLY (new) = 1;
                 /* LLVM LOCAL begin */
+                /* On Darwin, we can't emit temporaries like this with private
+                 * linkage, because it breaks 'atomization' of stuff in the
+                 * object file by the linker.  We need to emit this as a l label
+                 * without .globl.
+                 */
+#ifndef CONFIG_DARWIN_H
 #ifdef ENABLE_LLVM
 		DECL_LLVM_PRIVATE (new) = 1;
+#endif
 #endif
                 /* LLVM LOCAL end */
 		DECL_INITIAL (new) = ctor;
@@ -5524,8 +5538,11 @@ gimplify_expr (tree *expr_p, tree *pre_p, tree *post_p,
 #ifdef ENABLE_LLVM
           /* Handle the LLVM "ARRAY_REF with pointer base" extension by treating
              pointer-based ARRAY_REFs as binary expressions. */
-          if (TREE_CODE (TREE_TYPE (TREE_OPERAND (*expr_p, 0))) != ARRAY_TYPE)
+          if (TREE_CODE (TREE_TYPE (TREE_OPERAND (*expr_p, 0))) != ARRAY_TYPE) {
+            /* LLVM LOCAL 8004649 */
+            gimplify_type_sizes (TREE_TYPE (*expr_p), pre_p);
             goto expr_2;
+          }
 #endif
           /* LLVM LOCAL end */
           
