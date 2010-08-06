@@ -62,9 +62,14 @@ Boston, MA 02110-1301, USA.  */
 /* By default, target has a 80387, uses IEEE compatible arithmetic,
    and returns float values in the 387.  */
 /* LLVM LOCAL begin mainline */
-// @LOCALMOD
 #define TARGET_SUBTARGET_DEFAULT \
-	(MASK_80387 | MASK_IEEE_FP | MASK_FLOAT_RETURNS | MASK_ALIGN_DOUBLE)
+	(MASK_80387 | MASK_IEEE_FP | MASK_FLOAT_RETURNS)
+
+// @LOCALMOD-BEGIN: Added MASK_ALIGN_DOUBLE for X86-32.
+#undef TARGET_SUBTARGET32_DEFAULT
+#define TARGET_SUBTARGET32_DEFAULT \
+	(MASK_ALIGN_DOUBLE)
+// @LOCALMOD-END
 
 /* By default, 64-bit mode uses 128-bit long double.  */
 #undef TARGET_SUBTARGET64_DEFAULT
