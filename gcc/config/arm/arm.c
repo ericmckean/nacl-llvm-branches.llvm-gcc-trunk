@@ -143,6 +143,10 @@ static void arm_output_function_epilogue (FILE *, HOST_WIDE_INT);
 static void arm_output_function_prologue (FILE *, HOST_WIDE_INT);
 /* APPLE LOCAL v7 support. Merge from mainline */
 static void thumb1_output_function_prologue (FILE *, HOST_WIDE_INT);
+/* LLVM LOCAL begin */
+static tree arm_type_promotes_to(tree);
+static bool arm_is_fp16(tree);
+/* LLVM LOCAL end */
 static int arm_comp_type_attributes (tree, tree);
 static void arm_set_default_type_attributes (tree);
 static int arm_adjust_cost (rtx, rtx, rtx, int);
@@ -496,7 +500,10 @@ static tree arm_md_asm_clobbers (tree, tree, tree);
 #endif
 /* APPLE LOCAL end ARM darwin local binding */
 
-/* LLVM LOCAL pr5037 removed arm_mangle_type */
+/* APPLE LOCAL begin v7 support. Merge from Codesourcery */
+#undef TARGET_MANGLE_TYPE
+#define TARGET_MANGLE_TYPE arm_mangle_type
+/* APPLE LOCAL end support. Merge from Codesourcery */
 
 /* APPLE LOCAL begin ARM reliable backtraces */
 #undef TARGET_BUILTIN_SETJMP_FRAME_VALUE
@@ -512,6 +519,11 @@ static tree arm_md_asm_clobbers (tree, tree, tree);
 #undef TARGET_MD_ASM_CLOBBERS
 #define TARGET_MD_ASM_CLOBBERS arm_md_asm_clobbers
 /* APPLE LOCAL end 6902792 Q register clobbers in inline asm */
+
+/* LLVM LOCAL begin */
+#undef TARGET_TYPE_PROMOTES_TO
+#define TARGET_TYPE_PROMOTES_TO arm_type_promotes_to
+/* LLVM LOCAL end */
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 
@@ -544,14 +556,11 @@ enum processor_type arm_tune = arm_none;
 static enum processor_type arm_default_cpu = arm_none;
 
 /* APPLE LOCAL end v7 support. Merge from mainline */
-/* Which floating point model to use.  */
-enum arm_fp_model arm_fp_model;
+/* LLVM LOCAL begin */
+int arm_fpu_attr;
 
-/* Which floating point hardware is available.  */
-enum fputype arm_fpu_arch;
-
-/* Which floating point hardware to schedule for.  */
-enum fputype arm_fpu_tune;
+const struct fpu_desc * arm_fpu_desc;
+/* LLVM LOCAL end */
 
 /* Whether to use floating point hardware.  */
 enum float_abi_type arm_float_abi;
@@ -881,49 +890,26 @@ static struct arm_cpu_select arm_select[] =
 char arm_arch_name[ARM_ARCH_NAME_SIZE] = "__ARM_ARCH_0UNK__";
 /* APPLE LOCAL end v7 support. Merge from Codesourcery */
 
-struct fpu_desc
-{
-  const char * name;
-  enum fputype fpu;
-};
-
+/* LLVM LOCAL delete fpu_desc type fwd decl */
 
 /* Available values for -mfpu=.  */
 
+/* LLVM LOCAL begin */
 static const struct fpu_desc all_fpus[] =
 {
-  {"fpa",	FPUTYPE_FPA},
-  {"fpe2",	FPUTYPE_FPA_EMU2},
-  {"fpe3",	FPUTYPE_FPA_EMU2},
-  {"maverick",	FPUTYPE_MAVERICK},
-/* APPLE LOCAL begin v7 support. Merge from mainline */
-  {"vfp",	FPUTYPE_VFP},
-  {"vfp3",	FPUTYPE_VFP3},
-/* APPLE LOCAL end v7 support. Merge from mainline */
-/* APPLE LOCAL v7 support. Merge from Codesourcery */
-  {"neon",	FPUTYPE_NEON}
+  {"fpa",	FPUTYPE_FPA,      ARM_FP_MODEL_FPA,      false},
+  {"fpe2",	FPUTYPE_FPA_EMU2, ARM_FP_MODEL_FPA,      false},
+  {"fpe3",	FPUTYPE_FPA_EMU3, ARM_FP_MODEL_FPA,      false},
+  {"maverick",	FPUTYPE_MAVERICK, ARM_FP_MODEL_MAVERICK, false},
+  {"vfp",	FPUTYPE_VFP,      ARM_FP_MODEL_VFP,      false},
+  {"vfp3",	FPUTYPE_VFP3,     ARM_FP_MODEL_VFP,      false},
+  {"vfp3-fp16",	FPUTYPE_VFP3,     ARM_FP_MODEL_VFP,      true},
+  {"neon",	FPUTYPE_NEON,     ARM_FP_MODEL_VFP,      false},
+  {"neon-fp16",	FPUTYPE_NEON,     ARM_FP_MODEL_VFP,      true}
 };
+/* LLVM LOCAL end */
 
-
-/* Floating point models used by the different hardware.
-   See fputype in arm.h.  */
-
-static const enum fputype fp_model_for_fpu[] =
-{
-  /* No FP hardware.  */
-  ARM_FP_MODEL_UNKNOWN,		/* FPUTYPE_NONE  */
-  ARM_FP_MODEL_FPA,		/* FPUTYPE_FPA  */
-  ARM_FP_MODEL_FPA,		/* FPUTYPE_FPA_EMU2  */
-  ARM_FP_MODEL_FPA,		/* FPUTYPE_FPA_EMU3  */
-  ARM_FP_MODEL_MAVERICK,	/* FPUTYPE_MAVERICK  */
-/* APPLE LOCAL v7 support. Merge from mainline */
-  ARM_FP_MODEL_VFP,		/* FPUTYPE_VFP  */
-/* APPLE LOCAL begin v7 support. Merge from Codesourcery */
-  ARM_FP_MODEL_VFP,		/* FPUTYPE_VFP3  */
-  ARM_FP_MODEL_VFP		/* FPUTYPE_NEON  */
-/* APPLE LOCAL end v7 support. Merge from Codesourcery */
-};
-
+/* LLVM LOCAL remove fp_mode_for_fpu */
 
 struct float_abi
 {
@@ -1223,6 +1209,25 @@ arm_init_libfuncs (void)
   set_optab_libfunc (umod_optab, DImode, NULL);
   set_optab_libfunc (smod_optab, SImode, NULL);
   set_optab_libfunc (umod_optab, SImode, NULL);
+
+  /* LLVM LOCAL begin HF */
+  set_conv_libfunc (trunc_optab, HFmode, SFmode, "__gnu_f2h_ieee");
+  set_conv_libfunc (sext_optab,  SFmode, HFmode, "__gnu_h2f_ieee");
+
+  set_optab_libfunc (add_optab,  HFmode, NULL);
+  set_optab_libfunc (sdiv_optab, HFmode, NULL);
+  set_optab_libfunc (smul_optab, HFmode, NULL);
+  set_optab_libfunc (neg_optab,  HFmode, NULL);
+  set_optab_libfunc (sub_optab,  HFmode, NULL);
+
+  set_optab_libfunc (eq_optab,   HFmode, NULL);
+  set_optab_libfunc (ne_optab,   HFmode, NULL);
+  set_optab_libfunc (lt_optab,   HFmode, NULL);
+  set_optab_libfunc (le_optab,   HFmode, NULL);
+  set_optab_libfunc (ge_optab,   HFmode, NULL);
+  set_optab_libfunc (gt_optab,   HFmode, NULL);
+  set_optab_libfunc (unord_optab,HFmode, NULL);
+  /* LLVM LOCAL end HF */
 }
 
 /* Implement TARGET_HANDLE_OPTION.  */
@@ -1620,7 +1625,6 @@ arm_override_options (void)
   if (TARGET_IWMMXT_ABI && !TARGET_IWMMXT)
     error ("iwmmxt abi requires an iwmmxt capable cpu");
 
-  arm_fp_model = ARM_FP_MODEL_UNKNOWN;
   if (target_fpu_name == NULL && target_fpe_name != NULL)
     {
       if (streq (target_fpe_name, "2"))
@@ -1631,47 +1635,33 @@ arm_override_options (void)
 	error ("invalid floating point emulation option: -mfpe=%s",
 	       target_fpe_name);
     }
-  if (target_fpu_name != NULL)
-    {
-      /* The user specified a FPU.  */
-      for (i = 0; i < ARRAY_SIZE (all_fpus); i++)
-	{
-	  if (streq (all_fpus[i].name, target_fpu_name))
-	    {
-	      arm_fpu_arch = all_fpus[i].fpu;
-	      arm_fpu_tune = arm_fpu_arch;
-	      arm_fp_model = fp_model_for_fpu[arm_fpu_arch];
-	      break;
-	    }
-	}
-      if (arm_fp_model == ARM_FP_MODEL_UNKNOWN)
-	error ("invalid floating point option: -mfpu=%s", target_fpu_name);
-    }
-  else
+  /* LLVM LOCAL begin */
+  if (target_fpu_name == NULL)
     {
 #ifdef FPUTYPE_DEFAULT
-      /* Use the default if it is specified for this platform.  */
-      arm_fpu_arch = FPUTYPE_DEFAULT;
-      arm_fpu_tune = FPUTYPE_DEFAULT;
+      target_fpu_name = FPUTYPE_DEFAULT;
 #else
-      /* Pick one based on CPU type.  */
-      /* ??? Some targets assume FPA is the default.
-      if ((insn_flags & FL_VFP) != 0)
-	arm_fpu_arch = FPUTYPE_VFP;
-      else
-      */
       if (arm_arch_cirrus)
-	arm_fpu_arch = FPUTYPE_MAVERICK;
+	target_fpu_name = "maverick";
       else
-	arm_fpu_arch = FPUTYPE_FPA_EMU2;
+	target_fpu_name = "fpe2";
 #endif
-      if (tune_flags & FL_CO_PROC && arm_fpu_arch == FPUTYPE_FPA_EMU2)
-	arm_fpu_tune = FPUTYPE_FPA;
-      else
-	arm_fpu_tune = arm_fpu_arch;
-      arm_fp_model = fp_model_for_fpu[arm_fpu_arch];
-      gcc_assert (arm_fp_model != ARM_FP_MODEL_UNKNOWN);
     }
+
+  arm_fpu_desc = NULL;
+  for (i = 0; i < ARRAY_SIZE (all_fpus); i++)
+    {
+      if (streq (all_fpus[i].name, target_fpu_name))
+	{
+	  arm_fpu_desc = &all_fpus[i];
+	  arm_fpu_attr= arm_fpu_desc->fpu;
+	  break;
+	}
+    }
+
+  if (arm_fpu_desc == NULL)
+    error ("invalid floating point option: -mfpu=%s", target_fpu_name);
+  /* LLVM LOCAL end */
 
   if (target_float_abi_name != NULL)
     {
@@ -1712,15 +1702,16 @@ arm_override_options (void)
   /* APPLE LOCAL end v7 support. Merge from mainline */
   /* If soft-float is specified then don't use FPU.  */
   if (TARGET_SOFT_FLOAT)
-    arm_fpu_arch = FPUTYPE_NONE;
+    /* LLVM LOCAL */
+    arm_fpu_attr = FPUTYPE_NONE;
 
   /* For arm2/3 there is no need to do any scheduling if there is only
      a floating point emulator, or we are doing software floating-point.  */
   /* LLVM LOCAL begin */
 #ifndef ENABLE_LLVM
   if ((TARGET_SOFT_FLOAT
-       || arm_fpu_tune == FPUTYPE_FPA_EMU2
-       || arm_fpu_tune == FPUTYPE_FPA_EMU3)
+       || arm_fpu_attr == FPUTYPE_FPA_EMU2
+       || arm_fpu_attr == FPUTYPE_FPA_EMU3)
       && (tune_flags & FL_MODE32) == 0)
     flag_schedule_insns = flag_schedule_insns_after_reload = 0;
 #endif
@@ -3857,6 +3848,25 @@ arm_comp_type_attributes (tree type1, tree type2)
 
   return 1;
 }
+
+/* LLVM LOCAL begin */
+bool
+arm_is_fp16(tree ty)
+{
+  return (SCALAR_FLOAT_TYPE_P (ty) && TYPE_PRECISION (ty) == 16);
+}
+
+
+tree
+arm_type_promotes_to (tree ty)
+{
+  /* FIXME: Is NOP_EXPR better here? */
+  if (arm_is_fp16 (ty))
+    return float_type_node;
+
+  return NULL_TREE;
+}
+/* LLVM LOCAL end */
 
 /* APPLE LOCAL begin ARM longcall */
 /*  Encode long_call or short_call attribute by prefixing
@@ -12960,7 +12970,8 @@ arm_output_epilogue (rtx sibling)
         inclusive_bitmask (ARM_HARD_FRAME_POINTER_REGNUM + 1, 11);
       /* APPLE LOCAL end ARM custom frame layout */
 
-      if (arm_fpu_arch == FPUTYPE_FPA_EMU2)
+      /* LLVM LOCAL */
+      if (arm_fpu_attr == FPUTYPE_FPA_EMU2)
 	{
 	  for (reg = LAST_FPA_REGNUM; reg >= FIRST_FPA_REGNUM; reg--)
 	    if (regs_ever_live[reg] && !call_used_regs[reg])
@@ -13227,7 +13238,8 @@ arm_output_epilogue (rtx sibling)
 	      && !TARGET_IWMMXT
 	      && really_return
 	      && TARGET_SOFT_FLOAT
-	      && arm_fpu_arch == FPUTYPE_NONE
+	      /* LLVM LOCAL */
+	      && arm_fpu_attr == FPUTYPE_NONE
 	      && !flag_pic
 	      && !frame_pointer_needed)
 	    {
@@ -13249,7 +13261,8 @@ arm_output_epilogue (rtx sibling)
       /* APPLE LOCAL end ARM combine stack pop and register pop */
       /* APPLE LOCAL end ARM indirect sibcalls */
 
-      if (arm_fpu_arch == FPUTYPE_FPA_EMU2)
+      /* LLVM LOCAL */
+      if (arm_fpu_attr == FPUTYPE_FPA_EMU2)
 	{
 	  for (reg = FIRST_FPA_REGNUM; reg <= LAST_FPA_REGNUM; reg++)
 	    if (regs_ever_live[reg] && !call_used_regs[reg])
@@ -13928,7 +13941,8 @@ arm_save_coproc_regs(void)
 
   /* Save any floating point call-saved registers used by this
      function.  */
-  if (arm_fpu_arch == FPUTYPE_FPA_EMU2)
+  /* LLVM LOCAL */
+  if (arm_fpu_attr == FPUTYPE_FPA_EMU2)
     {
       for (reg = LAST_FPA_REGNUM; reg >= FIRST_FPA_REGNUM; reg--)
 	if (regs_ever_live[reg] && !call_used_regs[reg])
@@ -14165,7 +14179,8 @@ arm_expand_prologue (void)
       if (optimize_size
 	  && !flag_pic
 	  && !frame_pointer_needed
-	  && arm_fpu_arch == FPUTYPE_NONE
+	  /* LLVM LOCAL */
+	  && arm_fpu_attr == FPUTYPE_NONE
 	  && TARGET_SOFT_FLOAT
 	  && !TARGET_IWMMXT)
 	{
@@ -16759,8 +16774,48 @@ valid_neon_mode (enum machine_mode mode)
 
 /* LLVM LOCAL pr5037 removed make_neon_float_type */
 
-/* LLVM LOCAL begin multi-vector types */
 #ifdef ENABLE_LLVM
+/* LLVM LOCAL begin use builtin vector types for easier mangling */
+/* Create a new vector type node for a Neon vector.  This is just like
+   make_vector_type() but it does not enter the new type in the hash table.
+   The whole point of having these types built-in is to make them unique so
+   that the mangling function can identify them.  */
+
+static tree
+build_neonvec_type (tree innertype, int nunits)
+{
+  tree t;
+
+  t = make_node (VECTOR_TYPE);
+  TREE_TYPE (t) = TYPE_MAIN_VARIANT (innertype);
+  SET_TYPE_VECTOR_SUBPARTS (t, nunits);
+  TYPE_MODE (t) = VOIDmode;
+  TYPE_READONLY (t) = TYPE_READONLY (innertype);
+  TYPE_VOLATILE (t) = TYPE_VOLATILE (innertype);
+
+  layout_type (t);
+
+  {
+    tree index = build_int_cst (NULL_TREE, nunits - 1);
+    tree array = build_array_type (innertype, build_index_type (index));
+    tree rt = make_node (RECORD_TYPE);
+
+    TYPE_FIELDS (rt) = build_decl (FIELD_DECL, get_identifier ("f"), array);
+    DECL_CONTEXT (TYPE_FIELDS (rt)) = rt;
+    layout_type (rt);
+    TYPE_DEBUG_REPRESENTATION_TYPE (t) = rt;
+    /* In dwarfout.c, type lookup uses TYPE_UID numbers.  We want to output
+       the representation type, and we want to find that die when looking up
+       the vector type.  This is most easily achieved by making the TYPE_UID
+       numbers equal.  */
+    TYPE_UID (rt) = TYPE_UID (t);
+  }
+
+  return t;
+}
+/* LLVM LOCAL end use builtin vector types for easier mangling */
+
+/* LLVM LOCAL begin multi-vector types */
 /* Create a new builtin struct type containing NUMVECS fields (where NUMVECS
    is in the range from 1 to 4) of type VECTYPE.  */
 static tree
@@ -16793,6 +16848,57 @@ build_multivec_type (tree vectype, unsigned numvecs, const char *tag)
 }
 #endif /* ENABLE_LLVM */
 /* LLVM LOCAL end multi-vector types */
+
+/* LLVM LOCAL begin use builtin vector types for easier mangling */
+typedef struct
+{
+  tree neonvec_type;
+  const char *aapcs_name;
+} arm_mangle_map_entry;
+
+enum neonvec_types {
+  neon_int8x8_type,
+  neon_int16x4_type,
+  neon_int32x2_type,
+  neon_int64x1_type,
+  neon_float32x2_type,
+  neon_poly8x8_type,
+  neon_poly16x4_type,
+  neon_uint8x8_type,
+  neon_uint16x4_type,
+  neon_uint32x2_type,
+  neon_uint64x1_type,
+  neon_int8x16_type,
+  neon_int16x8_type,
+  neon_int32x4_type,
+  neon_int64x2_type,
+  neon_float32x4_type,
+  neon_poly8x16_type,
+  neon_poly16x8_type,
+  neon_uint8x16_type,
+  neon_uint16x8_type,
+  neon_uint32x4_type,
+  neon_uint64x2_type,
+  neon_LAST_type
+};
+
+static arm_mangle_map_entry arm_mangle_map[neon_LAST_type];
+
+/* Create a unique type node for a Neon vector type and enter it in the
+   arm_mangle_map along with the corresponding mangled name.  */
+static void
+define_neonvec_type (tree elt_type, unsigned num_elts,
+                     const char *type_name, const char *mangling,
+                     enum neonvec_types neonvec)
+{
+  tree neon_type_node = build_neonvec_type(elt_type, num_elts);
+  (*lang_hooks.types.register_builtin_type) (neon_type_node, type_name);
+
+  arm_mangle_map[neonvec].neonvec_type = neon_type_node;
+  arm_mangle_map[neonvec].aapcs_name = mangling;
+}
+
+/* LLVM LOCAL end use builtin vector types for easier mangling */
 
 static void
 arm_init_neon_builtins (void)
@@ -17050,6 +17156,8 @@ arm_init_neon_builtins (void)
   tree V4HI_pointer_node = build_pointer_type (V4HI_type_node);
   tree V2SI_pointer_node = build_pointer_type (V2SI_type_node);
   tree V2SF_pointer_node = build_pointer_type (V2SF_type_node);
+  /* LLVM LOCAL use v1di instead of di mode */
+  tree V1DI_pointer_node = build_pointer_type (V1DI_type_node);
   tree V16QI_pointer_node = build_pointer_type (V16QI_type_node);
   tree V8HI_pointer_node = build_pointer_type (V8HI_type_node);
   tree V4SI_pointer_node = build_pointer_type (V4SI_type_node);
@@ -17863,6 +17971,36 @@ arm_init_neon_builtins (void)
 					     "__builtin_neon_usi");
   (*lang_hooks.types.register_builtin_type) (intUDI_type_node,
 					     "__builtin_neon_udi");
+
+  /* LLVM LOCAL begin use builtin vector types for easier mangling */
+#define DEFINE_NEONVEC_TYPE(VECT, ELTT, NUMELTS, MANGLING) \
+  define_neonvec_type (ELTT, NUMELTS, "__neon_" #VECT "_t", \
+                       MANGLING, neon_##VECT##_type)
+
+  DEFINE_NEONVEC_TYPE(int8x8,    intQI_type_node,  8, "15__simd64_int8_t");
+  DEFINE_NEONVEC_TYPE(int16x4,   intHI_type_node,  4, "16__simd64_int16_t");
+  DEFINE_NEONVEC_TYPE(int32x2,   intSI_type_node,  2, "16__simd64_int32_t");
+  DEFINE_NEONVEC_TYPE(int64x1,   intDI_type_node,  1, "16__simd64_int64_t");
+  DEFINE_NEONVEC_TYPE(float32x2, float_type_node,  2, "18__simd64_float32_t");
+  DEFINE_NEONVEC_TYPE(poly8x8,   intQI_type_node,  8, "16__simd64_poly8_t");
+  DEFINE_NEONVEC_TYPE(poly16x4,  intHI_type_node,  4, "17__simd64_poly16_t");
+  DEFINE_NEONVEC_TYPE(uint8x8,  intUQI_type_node,  8, "16__simd64_uint8_t");
+  DEFINE_NEONVEC_TYPE(uint16x4, intUHI_type_node,  4, "17__simd64_uint16_t");
+  DEFINE_NEONVEC_TYPE(uint32x2, intUSI_type_node,  2, "17__simd64_uint32_t");
+  DEFINE_NEONVEC_TYPE(uint64x1, intUDI_type_node,  1, "17__simd64_uint64_t");
+
+  DEFINE_NEONVEC_TYPE(int8x16,   intQI_type_node, 16, "16__simd128_int8_t");
+  DEFINE_NEONVEC_TYPE(int16x8,   intHI_type_node,  8, "17__simd128_int16_t");
+  DEFINE_NEONVEC_TYPE(int32x4,   intSI_type_node,  4, "17__simd128_int32_t");
+  DEFINE_NEONVEC_TYPE(int64x2,   intDI_type_node,  2, "17__simd128_int64_t");
+  DEFINE_NEONVEC_TYPE(float32x4, float_type_node,  4, "19__simd128_float32_t");
+  DEFINE_NEONVEC_TYPE(poly8x16,  intQI_type_node, 16, "17__simd128_poly8_t");
+  DEFINE_NEONVEC_TYPE(poly16x8,  intHI_type_node,  8, "18__simd128_poly16_t");
+  DEFINE_NEONVEC_TYPE(uint8x16, intUQI_type_node, 16, "17__simd128_uint8_t");
+  DEFINE_NEONVEC_TYPE(uint16x8, intUHI_type_node,  8, "18__simd128_uint16_t");
+  DEFINE_NEONVEC_TYPE(uint32x4, intUSI_type_node,  4, "18__simd128_uint32_t");
+  DEFINE_NEONVEC_TYPE(uint64x2, intUDI_type_node,  2, "18__simd128_uint64_t");
+  /* LLVM LOCAL end use builtin vector types for easier mangling */
 
   /* LLVM LOCAL begin multi-vector types */
   (*lang_hooks.types.register_builtin_type) (V8QI2_type_node,
@@ -19602,6 +19740,17 @@ arm_init_neon_builtins (void)
 #undef TYPE6
 }
 
+/* LLVM LOCAL begin */
+static void
+arm_init_fp16_builtins (void)
+{
+  tree fp16_type = make_node (REAL_TYPE);
+  TYPE_PRECISION (fp16_type) = 16;
+  layout_type (fp16_type);
+  (*lang_hooks.types.register_builtin_type) (fp16_type, "__fp16");
+}
+/* LLVM LOCAL end */
+
 static void
 arm_init_builtins (void)
 {
@@ -19612,6 +19761,10 @@ arm_init_builtins (void)
   
   if (TARGET_NEON)
     arm_init_neon_builtins ();
+
+  if (TARGET_FP16)
+    arm_init_fp16_builtins ();
+
 /* APPLE LOCAL begin ARM darwin builtins */
 #ifdef SUBTARGET_INIT_BUILTINS
   SUBTARGET_INIT_BUILTINS;
@@ -22048,7 +22201,7 @@ arm_file_start (void)
       else
 	{
 	  int set_float_abi_attributes = 0;
-	  switch (arm_fpu_arch)
+	  switch (arm_fpu_desc->fpu)
 	    {
 	    case FPUTYPE_FPA:
 	      fpu_name = "fpa";
@@ -23872,8 +24025,45 @@ thumb2_output_casesi (rtx *operands)
     }
 }
 /* APPLE LOCAL end v7 support. Merge from mainline */
-/* APPLE LOCAL begin v7 support. Merge from Codesourcery */
-/* LLVM LOCAL pr5037 removed arm_mangle_type */
+
+/* A table and a function to perform ARM-specific name mangling for
+   NEON vector types in order to conform to the AAPCS (see "Procedure
+   Call Standard for the ARM Architecture", Appendix A).  To qualify
+   for emission with the mangled names defined in that document, a
+   vector type must not only be of the correct mode but also be
+   composed of NEON vector element types (e.g. __builtin_neon_qi).  */
+/* LLVM LOCAL moved arm_mangle_map declarations earlier in this file */
+const char *
+arm_mangle_type (tree type)
+{
+  /* LLVM LOCAL */
+  unsigned pos;
+
+  /* LLVM LOCAL look through typedefs */
+  type = TYPE_MAIN_VARIANT (type);
+
+  /* LLVM LOCAL begin half-float */
+  if (arm_is_fp16(type))
+    return "Dh";
+  /* LLVM LOCAL end half-float */
+
+  if (TREE_CODE (type) != VECTOR_TYPE)
+    return NULL;
+
+  /* LLVM LOCAL begin use builtin vector types for easier mangling */
+  /* Check if this type matches any of the unique vector type nodes in the
+     arm_mangle_map table.  */
+  for (pos = 0; pos < neon_LAST_type; ++pos)
+    {
+      if (type == arm_mangle_map[pos].neonvec_type)
+        return arm_mangle_map[pos].aapcs_name;
+    }
+  /* LLVM LOCAL end use builtin vector types for easier mangling */
+
+  /* Use the default mangling for unrecognized (possibly user-defined)
+     vector types.  */
+  return NULL;
+}
 
 void
 arm_asm_output_addr_diff_vec (FILE *file, rtx label, rtx body)

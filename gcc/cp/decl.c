@@ -377,7 +377,10 @@ pop_label (tree label, tree old_value)
 	  /* Avoid crashing later.  */
 	  define_label (location, DECL_NAME (label));
 	}
-      else if (!TREE_USED (label))
+/* LLVM LOCAL begin 8204109 */
+      else if (!TREE_USED (label) &&
+               strncmp (IDENTIFIER_POINTER (DECL_NAME (label)), "LASM$", 5) != 0)
+/* LLVM LOCAL end */
 	warning (OPT_Wunused_label, "label %q+D defined but not used", label);
     }
 
@@ -2210,9 +2213,11 @@ redeclaration_error_message (tree newdecl, tree olddecl)
 	   union { int i; };
 
 	   is invalid.  */
-      if (DECL_ANON_UNION_VAR_P (newdecl)
-	  || DECL_ANON_UNION_VAR_P (olddecl))
-	return "redeclaration of %q#D";
+      if (TREE_CODE (olddecl) == VAR_DECL
+          && TREE_CODE (newdecl) == VAR_DECL
+          && (DECL_ANON_UNION_VAR_P (newdecl)
+              || DECL_ANON_UNION_VAR_P (olddecl)))
+          return "redeclaration of %q#D";
       /* If at least one declaration is a reference, there is no
 	 conflict.  For example:
 

@@ -781,7 +781,10 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
   case NEON_BUILTIN_vadd:
     if (datatype == neon_datatype_polynomial)
       return BadImmediateError(exp, Result);
-    Result = Builder.CreateAdd(Ops[0], Ops[1]);
+    if (datatype == neon_datatype_float)
+      Result = Builder.CreateFAdd(Ops[0], Ops[1]);
+    else
+      Result = Builder.CreateAdd(Ops[0], Ops[1]);
     break;
 
   case NEON_BUILTIN_vaddl:
@@ -868,7 +871,9 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
       intID = Intrinsic::arm_neon_vmulp;
       intFn = Intrinsic::getDeclaration(TheModule, intID, &ResultType, 1);
       Result = Builder.CreateCall2(intFn, Ops[0], Ops[1]);
-    } else
+    } else if (datatype == neon_datatype_float)
+      Result = Builder.CreateFMul(Ops[0], Ops[1]);
+    else
       Result = Builder.CreateMul(Ops[0], Ops[1]);
     break;
 
@@ -886,7 +891,10 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
     }
     if (datatype == neon_datatype_polynomial)
       return BadImmediateError(exp, Result);
-    Result = Builder.CreateAdd(Ops[0], Builder.CreateMul(Ops[1], Ops[2]));
+    if (datatype == neon_datatype_float)
+      Result = Builder.CreateFAdd(Ops[0], Builder.CreateFMul(Ops[1], Ops[2]));
+    else
+      Result = Builder.CreateAdd(Ops[0], Builder.CreateMul(Ops[1], Ops[2]));
     break;
 
   case NEON_BUILTIN_vmls_lane:
@@ -903,7 +911,10 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
     }
     if (datatype == neon_datatype_polynomial)
       return BadImmediateError(exp, Result);
-    Result = Builder.CreateSub(Ops[0], Builder.CreateMul(Ops[1], Ops[2]));
+    if (datatype == neon_datatype_float)
+      Result = Builder.CreateFSub(Ops[0], Builder.CreateFMul(Ops[1], Ops[2]));
+    else
+      Result = Builder.CreateSub(Ops[0], Builder.CreateMul(Ops[1], Ops[2]));
     break;
 
   case NEON_BUILTIN_vmlal_lane:
@@ -1233,7 +1244,10 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
   case NEON_BUILTIN_vsub:
     if (datatype == neon_datatype_polynomial)
       return BadImmediateError(exp, Result);
-    Result = Builder.CreateSub(Ops[0], Ops[1]);
+    if (datatype == neon_datatype_float)
+      Result = Builder.CreateFSub(Ops[0], Ops[1]);
+    else
+      Result = Builder.CreateSub(Ops[0], Ops[1]);
     break;
 
   case NEON_BUILTIN_vsubl:
@@ -1573,7 +1587,10 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
     if (datatype != neon_datatype_signed &&
         datatype != neon_datatype_float)
       return BadImmediateError(exp, Result);
-    Result = Builder.CreateNeg(Ops[0]);
+    if (datatype == neon_datatype_float)
+      Result = Builder.CreateFNeg(Ops[0]);
+    else
+      Result = Builder.CreateNeg(Ops[0]);
     break;
 
   case NEON_BUILTIN_vqneg:
@@ -2076,6 +2093,23 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
     assert(STy && "expected a struct type");
     const VectorType *VTy = dyn_cast<const VectorType>(STy->getElementType(0));
     assert(VTy && "expected a vector type");
+    intOpTypes[0] = VTy;
+
+    // Handle 64-bit elements as a special-case.  There is no "dup" needed.
+    if (VTy->getElementType()->getPrimitiveSizeInBits() == 64) {
+      switch (neon_code) {
+      case NEON_BUILTIN_vld2_dup: intID = Intrinsic::arm_neon_vld2; break;
+      case NEON_BUILTIN_vld3_dup: intID = Intrinsic::arm_neon_vld3; break;
+      case NEON_BUILTIN_vld4_dup: intID = Intrinsic::arm_neon_vld4; break;
+      default: assert(false);
+      }
+      intFn = Intrinsic::getDeclaration(TheModule, intID, intOpTypes, 1);
+      Type *VPTy = PointerType::getUnqual(Type::getInt8Ty(Context));
+      Result = Builder.CreateCall(intFn, BitCastToType(Ops[0], VPTy));
+      Builder.CreateStore(Result, DestLoc->Ptr);
+      Result = 0;
+      break;
+    }
 
     // First use a vldN_lane intrinsic to load into lane 0 of undef vectors.
     switch (neon_code) {
@@ -2084,7 +2118,6 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
     case NEON_BUILTIN_vld4_dup: intID = Intrinsic::arm_neon_vld4lane; break;
     default: assert(false);
     }
-    intOpTypes[0] = VTy;
     intFn = Intrinsic::getDeclaration(TheModule, intID, intOpTypes, 1);
     unsigned NumVecs = 0;
     switch (neon_code) {

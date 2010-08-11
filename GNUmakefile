@@ -47,22 +47,19 @@ PREFIX = /usr
 #######################################################################
 
 # LLVM LOCAL begin
-# LLVM defaults to enabled.
-ifndef DISABLE_LLVM
-ENABLE_LLVM = true
 # LLVM gets installed into /Developer/usr/local, not /usr.
 ifndef DEVELOPER_DIR
 PREFIX = /Developer/usr/llvm-gcc-4.2
 else
 PREFIX = ${DEVELOPER_DIR}/usr/llvm-gcc-4.2
 endif
-else
-ENABLE_LLVM = false
-endif
 
-# Unless assertions are forced on in the GMAKE command line, enable them.
+# Default to not reinstall libLTO.dylib.
+INSTALL_LIBLTO := no
+
+# Unless assertions are forced on in the GMAKE command line, disable them.
 ifndef ENABLE_ASSERTIONS
-ENABLE_ASSERTIONS := yes
+ENABLE_ASSERTIONS := no
 endif
 
 ifndef LLVMCORE_PATH
@@ -73,6 +70,17 @@ LLVMCORE_PATH = ${DEVELOPER_DIR}/usr/local
 endif
 endif
 
+# Default is optimized build.
+ifeq ($(LLVM_DEBUG),1)
+LLVM_OPTIMIZED := no
+else
+LLVM_OPTIMIZED := yes
+endif
+
+# Cross-builds for ARM hosts or iOS Simulator are not supported here.
+ARM_HOSTED_BUILD := no
+IOS_SIM_BUILD := no
+
 ifndef RC_ProjectSourceVersion
 RC_ProjectSourceVersion = 9999
 endif
@@ -81,12 +89,39 @@ ifndef RC_ProjectSourceSubversion
 RC_ProjectSourceSubversion = 00
 endif
 
-install: $(OBJROOT) $(SYMROOT) $(DSTROOT)
+install:
+	$(MAKE) OBJROOT=$(OBJROOT)/obj-llvmCore \
+	        SYMROOT=$(OBJROOT)/sym-llvmCore \
+	        DSTROOT=$(OBJROOT)/dst-llvmCore llvmCore
+	$(MAKE) LLVMCORE_PATH=$(OBJROOT)/dst-llvmCore/Developer/usr/local \
+	        llvmgcc42
+
+llvmCore: $(OBJROOT) $(SYMROOT) $(DSTROOT)
+	if [ ! -d $(SRC)/llvmCore ]; then \
+	  echo "Error: llvmCore source directory is missing"; \
+	  exit 1; \
+	fi
+	cd $(OBJROOT) && \
+	  $(SRC)/llvmCore/utils/buildit/build_llvm "$(RC_ARCHS)" "$(TARGETS)" \
+	    $(SRC)/llvmCore /Developer/usr/local $(DSTROOT) $(SYMROOT) \
+	    $(ENABLE_ASSERTIONS) $(LLVM_OPTIMIZED) $(INSTALL_LIBLTO) \
+	    $(ARM_HOSTED_BUILD) $(IOS_SIM_BUILD) \
+	    $(RC_ProjectSourceVersion) $(RC_ProjectSourceSubversion) 
+
+llvmgcc42: $(OBJROOT) $(SYMROOT) $(DSTROOT)
 	cd $(OBJROOT) && \
 	  $(SRC)/build_gcc "$(RC_ARCHS)" "$(TARGETS)" \
-	    $(SRC) $(PREFIX) $(DSTROOT) $(SYMROOT) $(ENABLE_LLVM) \
+	    $(SRC) $(PREFIX) $(DSTROOT) $(SYMROOT) $(INSTALL_LIBLTO) \
 	    $(ENABLE_ASSERTIONS) $(LLVMCORE_PATH) \
 	    $(RC_ProjectSourceVersion) $(RC_ProjectSourceSubversion) 
+
+Embedded:
+	@if [ -z "$(ARM_SDK)" ]; then \
+	  echo "ARM_SDK must be set to build the Embedded target"; \
+	  exit 1; \
+	fi
+	ARM_PLATFORM=`xcodebuild -version -sdk $(ARM_SDK) PlatformPath` && \
+	$(MAKE) DSTROOT=$(DSTROOT)$$ARM_PLATFORM DISABLE_USR_LINKS=1 install
 
 # LLVM LOCAL end
 
@@ -108,10 +143,12 @@ installsrc:
 	fi
 	# LLVM LOCAL begin: Avoid verification error due to binaries in libjava.
 	rm -rf "$(SRCROOT)/libjava/"
-	find -d "$(SRCROOT)" \( -type d -a -name CVS -o \
+	find -d "$(SRCROOT)" \( -type d -a -name .svn -o \
 	                        -type f -a -name .DS_Store -o \
 				-name \*~ -o -name .\#\* \) \
 	  -exec rm -rf {} \;
+	rm -rf "$(SRCROOT)/gcc/testsuite"
+	rm -rf "$(SRCROOT)/llvmCore/test"
 
 #######################################################################
 
@@ -139,4 +176,4 @@ clean:
 $(OBJROOT) $(SYMROOT) $(DSTROOT):
 	mkdir -p $@
 
-.PHONY: install installsrc clean
+.PHONY: install installsrc clean llvmCore llvmgcc42 Embedded

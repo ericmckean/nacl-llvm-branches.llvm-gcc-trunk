@@ -858,24 +858,24 @@ AC_ARG_ENABLE(llvm,
      LLVMBUILDMODE="Release"
  elif test -x "$LLVMBASEPATH/Debug/bin/llc$EXEEXT"; then
      LLVMBUILDMODE="Debug"
- elif test -x "$LLVMBASEPATH/Release-Asserts/bin/llc$EXEEXT"; then
-     echo Found Release-Asserts LLVM Tree in $LLVMBASEPATH
-     LLVMBUILDMODE="Release-Asserts"
- elif test -x "$LLVMBASEPATH/Debug-Asserts/bin/llc$EXEEXT"; then
-     echo Found Debug-Asserts LLVM Tree in $LLVMBASEPATH
-     LLVMBUILDMODE="Debug-Asserts"
+ elif test -x "$LLVMBASEPATH/Release+Asserts/bin/llc$EXEEXT"; then
+     echo Found Release+Asserts LLVM Tree in $LLVMBASEPATH
+     LLVMBUILDMODE="Release+Asserts"
+ elif test -x "$LLVMBASEPATH/Debug+Asserts/bin/llc$EXEEXT"; then
+     echo Found Debug+Asserts LLVM Tree in $LLVMBASEPATH
+     LLVMBUILDMODE="Debug+Asserts"
  elif test -x "$LLVMBASEPATH/Release+Checks/bin/llc$EXEEXT"; then
      echo Found Release+Checks LLVM Tree in $LLVMBASEPATH
      LLVMBUILDMODE="Release+Checks"
  elif test -x "$LLVMBASEPATH/Debug+Checks/bin/llc$EXEEXT"; then
      echo Found Debug+Checks LLVM Tree in $LLVMBASEPATH
      LLVMBUILDMODE="Debug+Checks"
- elif test -x "$LLVMBASEPATH/Release-Asserts+Checks/bin/llc$EXEEXT"; then
-     echo Found Release-Asserts+Checks LLVM Tree in $LLVMBASEPATH
-     LLVMBUILDMODE="Release-Asserts+Checks"
- elif test -x "$LLVMBASEPATH/Debug-Asserts+Checks/bin/llc$EXEEXT"; then
-     echo Found Debug-Asserts+Checks LLVM Tree in $LLVMBASEPATH
-     LLVMBUILDMODE="Debug-Asserts+Checks"
+ elif test -x "$LLVMBASEPATH/Release+Asserts+Checks/bin/llc$EXEEXT"; then
+     echo Found Release+Asserts+Checks LLVM Tree in $LLVMBASEPATH
+     LLVMBUILDMODE="Release+Asserts+Checks"
+ elif test -x "$LLVMBASEPATH/Debug+Asserts+Checks/bin/llc$EXEEXT"; then
+     echo Found Debug+Asserts+Checks LLVM Tree in $LLVMBASEPATH
+     LLVMBUILDMODE="Debug+Asserts+Checks"
  elif test -x "$LLVMBASEPATH/bin/llc$EXEEXT"; then
      echo Found Installed LLVM Tree in $LLVMBASEPATH
  elif test x$LLVMBUILDMODE = x; then
@@ -2478,6 +2478,8 @@ foo:	.long	25
 	tls_first_major=2
 	tls_first_minor=17
 	;;
+	i[34567]86-*-darwin*)
+	;;
   i[34567]86-*-*)
     conftest_s='
 	.section ".tdata","awT",@progbits
@@ -2497,6 +2499,8 @@ foo:	.long	25
 	tls_first_major=2
 	tls_first_minor=14
 	tls_as_opt=--fatal-warnings
+	;;
+	x86_64-*-darwin*)
 	;;
   x86_64-*-*)
     conftest_s='
@@ -2744,6 +2748,16 @@ else
   [$tls_first_major,$tls_first_minor,0], [$tls_as_opt], [$conftest_s],,
   [set_have_as_tls=yes])
 fi
+# Linker test for tls.
+case "$target" in
+  *-*-darwin*)
+    AC_MSG_CHECKING(darwin linker tls support)
+    AC_TRY_LINK_FUNC([_tlv_bootstrap],[set_have_as_tls=yes],[])
+    AC_MSG_RESULT($set_have_as_tls)
+  ;;
+  *)
+  ;;
+esac
 if test $set_have_as_tls = yes ; then
   AC_DEFINE(HAVE_AS_TLS, 1,
 	    [Define if your assembler supports thread-local storage.])
