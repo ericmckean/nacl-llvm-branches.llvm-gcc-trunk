@@ -1005,6 +1005,13 @@ common_handle_option (size_t scode, const char *arg, int value,
       set_fast_math_flags (value);
       break;
 
+    /* LLVM LOCAL begin */
+    case OPT_ffinite_math_only:
+      flag_honor_infinites = !value;
+      flag_honor_nans = !value;
+      break;
+    /* LLVM LOCAL end */
+
     case OPT_ffixed_:
       fix_register (arg, 1, 1);
       break;
@@ -1183,7 +1190,13 @@ common_handle_option (size_t scode, const char *arg, int value,
 
     case OPT_gstabs:
     case OPT_gstabs_:
+      /* LLVM LOCAL begin */
+#ifdef ENABLE_LLVM
+      error ("llvm-gcc does not support STABS debugging format");
+#else
       set_debug_level (DBX_DEBUG, code == OPT_gstabs_, arg);
+#endif
+      /* LLVM LOCAL end */
       break;
 
     case OPT_gvms:
@@ -1291,7 +1304,10 @@ set_fast_math_flags (int set)
 {
   flag_trapping_math = !set;
   flag_unsafe_math_optimizations = set;
-  flag_finite_math_only = set;
+  /* LLVM LOCAL begin */
+  flag_honor_infinites = !set;
+  flag_honor_nans = !set;
+  /* LLVM LOCAL end */
   flag_errno_math = !set;
   if (set)
     {
@@ -1307,7 +1323,10 @@ fast_math_flags_set_p (void)
 {
   return (!flag_trapping_math
 	  && flag_unsafe_math_optimizations
-	  && flag_finite_math_only
+          /* LLVM LOCAL begin */
+          && !flag_honor_infinites
+          && !flag_honor_nans
+          /* LLVM LOCAL end */
 	  && !flag_errno_math);
 }
 
