@@ -118,6 +118,10 @@ fi
 NON_ARM_CONFIGFLAGS="--with-gxx-include-dir=/usr/include/c++/$LIBSTDCXX_VERSION"
 # LLVM LOCAL end
 
+# Build against the MacOSX10.5 SDK for PowerPC.
+PPC_SYSROOT=/Developer/SDKs/MacOSX10.5.sdk
+PPC_CONFIGFLAGS="$NON_ARM_CONFIGFLAGS --with-build-sysroot=\"$PPC_SYSROOT\""
+
 DARWIN_VERS=`uname -r | sed 's/\..*//'`
 echo DARWIN_VERS = $DARWIN_VERS
 
@@ -359,6 +363,8 @@ for t in $CROSS_TARGETS ; do
       AS_FOR_TARGET=$DIR/bin/${t}-apple-darwin$DARWIN_VERS-as \
       LD_FOR_TARGET=$DIR/bin/${t}-apple-darwin$DARWIN_VERS-ld \
       $SRC_DIR/configure $T_CONFIGFLAGS $ARM_CONFIGFLAGS || exit 1
+    elif [ $t = 'powerpc' ] ; then
+      $SRC_DIR/configure $T_CONFIGFLAGS $PPC_CONFIGFLAGS || exit 1
     else
       $SRC_DIR/configure $T_CONFIGFLAGS $NON_ARM_CONFIGFLAGS || exit 1
     fi
@@ -420,6 +426,8 @@ for h in $HOSTS ; do
           --target=$t-apple-darwin$DARWIN_VERS"
 	if [ $t = 'arm' ] && [ $h != 'arm' ] ; then
           T_CONFIGFLAGS="$T_CONFIGFLAGS $ARM_CONFIGFLAGS"
+	elif [ $t = 'powerpc' ] && [ $h != 'powerpc' ] ; then
+          T_CONFIGFLAGS="$T_CONFIGFLAGS $PPC_CONFIGFLAGS"
         else
           T_CONFIGFLAGS="$T_CONFIGFLAGS $NON_ARM_CONFIGFLAGS"
         fi
@@ -582,30 +590,6 @@ for t in $TARGETS ; do
 #  strip -x -c .$DEST_ROOT/lib/gcc/$t-apple-darwin$DARWIN_VERS/$VERS/libstdc++.dylib || exit 1
 done
 fi
-
-# include
-HEADERPATH=$DEST_ROOT/include/gcc/darwin/$MAJ_VERS
-mkdir -p .$HEADERPATH || exit 1
-
-# Some headers are installed from more-hdrs/.  They all share
-# one common feature: they shouldn't be installed here.  Sometimes,
-# they should be part of FSF GCC and installed from there; sometimes,
-# they should be installed by some completely different package; sometimes,
-# they only exist for codewarrior compatibility and codewarrior should provide
-# its own.  We take care not to install the headers if Libc is already
-# providing them.
-cd $SRC_DIR/more-hdrs
-for h in `echo *.h` ; do
-  if [ ! -f /usr/include/$h -o -L /usr/include/$h ] ; then
-    cp -R $h $DEST_DIR$HEADERPATH/$h || exit 1
-    for t in $TARGETS ; do
-      THEADERPATH=$DEST_DIR$DEST_ROOT/lib/gcc/${t}-apple-darwin$DARWIN_VERS/$VERS/include
-      [ -f $THEADERPATH/$h ] || \
-        ln -s ../../../../../include/gcc/darwin/$MAJ_VERS/$h $THEADERPATH/$h || \
-        exit 1
-    done
-  fi
-done
 
 # Add extra man page symlinks for 'c++' and for arch-specific names.
 MDIR=$DEST_DIR$DEST_ROOT/share/man/man1
