@@ -140,7 +140,7 @@ uint64_t getInt64(tree t, bool Unsigned) {
 
 /// getPointerAlignment - Return the alignment in bytes of exp, a pointer valued
 /// expression, or 1 if the alignment is not known.
-static unsigned int getPointerAlignment(tree exp) {
+unsigned int getPointerAlignment(tree exp) {
   assert(POINTER_TYPE_P (TREE_TYPE (exp)) && "Expected a pointer type!");
   unsigned int align = get_pointer_alignment(exp, BIGGEST_ALIGNMENT) / 8;
   return align ? align : 1;
@@ -188,6 +188,7 @@ TreeToLLVM::TreeToLLVM(tree fndecl) :
   GreatestAlignment = TheTarget->getFrameInfo()->getStackAlignment();
   SeenVLA = NULL;
 
+  CatchAll = 0;
   ExceptionValue = 0;
   ExceptionSelectorValue = 0;
   FuncEHException = 0;
@@ -248,6 +249,11 @@ static void llvm_store_scalar_argument(Value *Loc, Value *ArgVal,
 #define LLVM_STORE_SCALAR_ARGUMENT(LOC,ARG,TYPE,SIZE,BUILDER)   \
   llvm_store_scalar_argument((LOC),(ARG),(TYPE),(SIZE),(BUILDER))
 #endif
+
+// This is true for types whose alignment when passed on the stack is less
+// than the alignment of the type.
+#define LLVM_BYVAL_ALIGNMENT_TOO_SMALL(T) \
+   (LLVM_BYVAL_ALIGNMENT(T) && LLVM_BYVAL_ALIGNMENT(T) < TYPE_ALIGN_UNIT(T))
 
 namespace {
   /// FunctionPrologArgumentConversion - This helper class is driven by the ABI
@@ -365,6 +371,33 @@ namespace {
     }
 
     void HandleByValArgument(const llvm::Type *LLVMTy, tree type) {
+      if (LLVM_BYVAL_ALIGNMENT_TOO_SMALL(type)) {
+        // Incoming object on stack is insufficiently aligned for the type.
+        // Make a correctly aligned copy.
+        assert(!LocStack.empty());
+        Value *Loc = LocStack.back();
+        // We cannot use field-by-field copy here; x86 long double is 16
+        // bytes, but only 10 are copied.  If the object is really a union
+        // we might need the other bytes.  We must also be careful to use
+        // the smaller alignment.
+        const Type *SBP = Type::getInt8PtrTy(Context);
+        const Type *IntPtr = getTargetData().getIntPtrType(Context);
+        Value *Ops[5] = {
+          Builder.CreateCast(Instruction::BitCast, Loc, SBP),
+          Builder.CreateCast(Instruction::BitCast, AI, SBP),
+          ConstantInt::get(IntPtr,
+                           TREE_INT_CST_LOW(TYPE_SIZE_UNIT(type))),
+          ConstantInt::get(Type::getInt32Ty(Context), 
+                           LLVM_BYVAL_ALIGNMENT(type)),
+          ConstantInt::get(Type::getInt1Ty(Context), false)
+        };
+        const Type *ArgTypes[3] = {SBP, SBP, IntPtr };
+        Builder.CreateCall(Intrinsic::getDeclaration(TheModule, 
+                                                     Intrinsic::memcpy,
+                                                     ArgTypes, 3), Ops, Ops+5);
+
+        AI->setName(NameStack.back());
+      }
       ++AI;
     }
 
@@ -403,13 +436,13 @@ namespace {
 // passed in memory byval.
 static bool isPassedByVal(tree type, const Type *Ty,
                           std::vector<const Type*> &ScalarArgs,
-                          bool isShadowRet, CallingConv::ID &CC) {
+                          CallingConv::ID &CC) {
   if (LLVM_SHOULD_PASS_AGGREGATE_USING_BYVAL_ATTR(type, Ty))
     return true;
 
   std::vector<const Type*> Args;
   if (LLVM_SHOULD_PASS_AGGREGATE_IN_MIXED_REGS(type, Ty, CC, Args) &&
-      LLVM_AGGREGATE_PARTIALLY_PASSED_IN_REGS(Args, ScalarArgs, isShadowRet,
+      LLVM_AGGREGATE_PARTIALLY_PASSED_IN_REGS(Args, ScalarArgs,
                                               CC))
     // We want to pass the whole aggregate in registers but only some of the
     // registers are available.
@@ -640,17 +673,19 @@ void TreeToLLVM::StartFunctionBody() {
   FunctionPrologArgumentConversion Client(FnDecl, AI, Builder, CallingConv);
   DefaultABI ABIConverter(Client);
 
+  // Scalar arguments processed so far.
+  std::vector<const Type*> ScalarArgs;
+
   // Handle the DECL_RESULT.
   ABIConverter.HandleReturnType(TREE_TYPE(TREE_TYPE(FnDecl)), FnDecl,
-                                DECL_BUILT_IN(FnDecl));
+                                DECL_BUILT_IN(FnDecl),
+                                ScalarArgs);
   // Remember this for use by FinishFunctionBody.
   ReturnOffset = Client.Offset;
 
   // Prepend the static chain (if any) to the list of arguments.
   tree Args = static_chain ? static_chain : DECL_ARGUMENTS(FnDecl);
 
-  // Scalar arguments processed so far.
-  std::vector<const Type*> ScalarArgs;
   while (Args) {
     const char *Name = "unnamed_arg";
     if (DECL_NAME(Args)) Name = IDENTIFIER_POINTER(DECL_NAME(Args));
@@ -659,12 +694,17 @@ void TreeToLLVM::StartFunctionBody() {
     bool isInvRef = isPassedByInvisibleReference(TREE_TYPE(Args));
     if (isInvRef ||
         (ArgTy->isVectorTy() &&
-         LLVM_SHOULD_PASS_VECTOR_USING_BYVAL_ATTR(TREE_TYPE(Args))) ||
+         LLVM_SHOULD_PASS_VECTOR_USING_BYVAL_ATTR(TREE_TYPE(Args)) &&
+         !LLVM_BYVAL_ALIGNMENT_TOO_SMALL(TREE_TYPE(Args))) ||
         (!ArgTy->isSingleValueType() &&
          isPassedByVal(TREE_TYPE(Args), ArgTy, ScalarArgs,
-                       Client.isShadowReturn(), CallingConv))) {
+                       CallingConv) &&
+         !LLVM_BYVAL_ALIGNMENT_TOO_SMALL(TREE_TYPE(Args)))) {
       // If the value is passed by 'invisible reference' or 'byval reference',
-      // the l-value for the argument IS the argument itself.
+      // the l-value for the argument IS the argument itself.  But for byval
+      // arguments whose alignment as an argument is less than the normal
+      // alignment of the type (examples are x86-32 aggregates containing long
+      // double and large x86-64 vectors), we need to make the copy.
       AI->setName(Name);
       SET_DECL_LLVM(Args, AI);
       if (!isInvRef && EmitDebugInfo())
@@ -676,7 +716,7 @@ void TreeToLLVM::StartFunctionBody() {
       // Otherwise, we create an alloca to hold the argument value and provide
       // an l-value.  On entry to the function, we copy formal argument values
       // into the alloca.
-      Value *Tmp = CreateTemporary(ArgTy);
+      Value *Tmp = CreateTemporary(ArgTy, TYPE_ALIGN_UNIT(TREE_TYPE(Args)));
       Tmp->setName(std::string(Name)+"_addr");
       SET_DECL_LLVM(Args, Tmp);
       if (EmitDebugInfo())
@@ -814,6 +854,9 @@ Function *TreeToLLVM::FinishFunctionBody() {
   }
   UniquedValues.clear();
 
+#if !defined(TARGET_ARM)
+  // ARM supports VLAs + dynamic realignment. Others don't.
+
   // If we've seen a vla in this function and we'll possibly need to
   // either dynamically realign or this is greater than the maximum stack
   // alignment, output a warning.  This is here so we don't warn every time
@@ -822,6 +865,7 @@ Function *TreeToLLVM::FinishFunctionBody() {
       GreatestAlignment > TheTarget->getFrameInfo()->getStackAlignment())
       warning (0, "alignment for %q+D conflicts with a dynamically realigned "
                   "stack", SeenVLA);
+#endif
   return Fn;
 }
 
@@ -1375,7 +1419,7 @@ Value *TreeToLLVM::BitCastToType(Value *V, const Type *Ty) {
 /// CreateTemporary - Create a new alloca instruction of the specified type,
 /// inserting it into the entry block and returning it.  The resulting
 /// instruction's type is a pointer to the specified type.
-AllocaInst *TreeToLLVM::CreateTemporary(const Type *Ty) {
+AllocaInst *TreeToLLVM::CreateTemporary(const Type *Ty, unsigned align) {
   if (AllocaInsertionPoint == 0) {
     // Create a dummy instruction in the entry block as a marker to insert new
     // alloc instructions before.  It doesn't matter what this instruction is,
@@ -1388,7 +1432,10 @@ AllocaInst *TreeToLLVM::CreateTemporary(const Type *Ty) {
     Fn->begin()->getInstList().insert(Fn->begin()->begin(),
                                       AllocaInsertionPoint);
   }
-  return new AllocaInst(Ty, 0, "memtmp", AllocaInsertionPoint);
+  if (align)
+    return new AllocaInst(Ty, 0, align, "memtmp", AllocaInsertionPoint);
+  else
+    return new AllocaInst(Ty, 0, "memtmp", AllocaInsertionPoint);
 }
 
 /// CreateTempLoc - Like CreateTemporary, but returns a MemRef.
@@ -2107,6 +2154,24 @@ void TreeToLLVM::CreateExceptionValues() {
                                               Intrinsic::eh_selector);
   FuncEHGetTypeID = Intrinsic::getDeclaration(TheModule,
                                               Intrinsic::eh_typeid_for);
+
+  CatchAll = TheModule->getGlobalVariable("llvm.eh.catch.all.value");
+  if (!CatchAll && lang_eh_catch_all) {
+    Constant *Init = 0;
+    tree catch_all_type = lang_eh_catch_all();
+    if (catch_all_type == NULL_TREE)
+      // Use a C++ style null catch-all object.
+      Init = Constant::getNullValue(Type::getInt8PtrTy(Context));
+    else
+      // This language has a type that catches all others.
+      Init = cast<Constant>(Emit(catch_all_type, 0));
+
+    CatchAll = new GlobalVariable(*TheModule, Init->getType(), true,
+                                  GlobalVariable::LinkOnceAnyLinkage,
+                                  Init, "llvm.eh.catch.all.value");
+    CatchAll->setSection("llvm.metadata");
+    AttributeUsedGlobals.insert(CatchAll);
+  }
 }
 
 /// getPostPad - Return the post landing pad for the given exception handling
@@ -2160,7 +2225,6 @@ void TreeToLLVM::EmitLandingPads() {
 
     bool HasCleanup = false;
     bool HasCatchAll = false;
-    static GlobalVariable *CatchAll = 0;
 
     for (std::vector<struct eh_region *>::iterator I = Handlers.begin(),
          E = Handlers.end(); I != E; ++I) {
@@ -2187,17 +2251,8 @@ void TreeToLLVM::EmitLandingPads() {
         tree TypeList = get_eh_type_list(region);
 
         if (!TypeList) {
-          // Catch-all - push a null pointer.
-          if (!CatchAll) {
-            Constant *Init =
-              Constant::getNullValue(Type::getInt8PtrTy(Context));
-
-            CatchAll = new GlobalVariable(*TheModule, Init->getType(), true,
-                                          GlobalVariable::LinkOnceAnyLinkage,
-                                          Init, "llvm.eh.catch.all.value");
-            CatchAll->setSection("llvm.metadata");
-          }
-
+          // Catch-all - push the catch-all object.
+          assert(CatchAll && "Language did not define lang_eh_catch_all?");
           Args.push_back(CatchAll);
           HasCatchAll = true;
         } else {
@@ -2224,23 +2279,7 @@ void TreeToLLVM::EmitLandingPads() {
           // Some exceptions from this region may not be caught by any handler.
           // Since invokes are required to branch to the unwind label no matter
           // what exception is being unwound, append a catch-all.
-
-          if (!CatchAll) {
-            Constant *Init = 0;
-            tree catch_all_type = lang_eh_catch_all();
-            if (catch_all_type == NULL_TREE)
-              // Use a C++ style null catch-all object.
-              Init = Constant::getNullValue(Type::getInt8PtrTy(Context));
-            else
-              // This language has a type that catches all others.
-              Init = cast<Constant>(Emit(catch_all_type, 0));
-
-            CatchAll = new GlobalVariable(*TheModule, Init->getType(), true,
-                                          GlobalVariable::LinkOnceAnyLinkage,
-                                          Init, "llvm.eh.catch.all.value");
-            CatchAll->setSection("llvm.metadata");
-          }
-
+          assert(CatchAll && "Language did not define lang_eh_catch_all?");
           Args.push_back(CatchAll);
         }
       }
@@ -2404,20 +2443,33 @@ void TreeToLLVM::EmitUnwindBlock() {
 //                           ... Expressions ...
 //===----------------------------------------------------------------------===//
 
-static bool canEmitRegisterVariable(tree exp) {
+static bool canEmitLocalRegisterVariable(tree exp) {
   // Only variables can be marked as 'register'.
   if (TREE_CODE(exp) != VAR_DECL || !DECL_REGISTER(exp))
     return false;
 
-  // We can emit inline assembler for access to global register variables.
+  // Global register variables are not accepted here.
   if (TREE_STATIC(exp) || DECL_EXTERNAL(exp) || TREE_PUBLIC(exp))
-    return true;
+    return false;
 
   // Emit inline asm if this is local variable with assembler name on it.
   if (DECL_ASSEMBLER_NAME_SET_P(exp))
     return true;
 
   // Otherwise - it's normal automatic variable.
+  return false;
+}
+
+static bool canEmitGlobalRegisterVariable(tree exp) {
+  // Only variables can be marked as 'register'.
+  if (TREE_CODE(exp) != VAR_DECL || !DECL_REGISTER(exp))
+    return false;
+
+  // Local register variables are not accepted here.
+  if (TREE_STATIC(exp) || DECL_EXTERNAL(exp) || TREE_PUBLIC(exp))
+    return true;
+
+  // Otherwise - it's normal automatic variable, or local register variable.
   return false;
 }
 
@@ -2438,10 +2490,10 @@ Value *TreeToLLVM::EmitLoadOfLValue(tree exp, const MemRef *DestLoc) {
     DECL_GIMPLE_FORMAL_TEMP_P(exp) = 0;
     EmitAutomaticVariableDecl(exp);
     // Fall through.
-  } else if (canEmitRegisterVariable(exp)) {
-    // If this is a register variable, EmitLV can't handle it (there is no
-    // l-value of a register variable).  Emit an inline asm node that copies the
-    // value out of the specified register.
+  } else if (canEmitGlobalRegisterVariable(exp)) {
+    // If this is a global register variable, EmitLV can't handle it (there is
+    // no l-value of a global register variable).  Emit an inline asm node that
+    // copies the value out of the specified register.
     return EmitReadOfRegisterVariable(exp, DestLoc);
   }
 
@@ -2456,7 +2508,11 @@ Value *TreeToLLVM::EmitLoadOfLValue(tree exp, const MemRef *DestLoc) {
       Value *Ptr = BitCastToType(LV.Ptr, Ty->getPointerTo());
       LoadInst *LI = Builder.CreateLoad(Ptr, isVolatile);
       LI->setAlignment(Alignment);
-      return LI;
+      if (canEmitLocalRegisterVariable(exp)) {
+        // For register variable, move the loaded variable into the right reg.
+        return EmitMoveOfRegVariableToRightReg(LI, exp);
+      } else
+        return LI;
     } else {
       EmitAggregateCopy(*DestLoc, MemRef(LV.Ptr, Alignment, isVolatile),
                         TREE_TYPE(exp));
@@ -2958,16 +3014,17 @@ Value *TreeToLLVM::EmitCallOf(Value *Callee, tree exp, const MemRef *DestLoc,
   DefaultABI ABIConverter(Client);
 
   // Handle the result, including struct returns.
+  std::vector<const Type*> ScalarArgs;
   ABIConverter.HandleReturnType(TREE_TYPE(exp),
                                 fndecl ? fndecl : exp,
-                                fndecl ? DECL_BUILT_IN(fndecl) : false);
+                                fndecl ? DECL_BUILT_IN(fndecl) : false,
+                                ScalarArgs);
 
   // Pass the static chain, if any, as the first parameter.
   if (TREE_OPERAND(exp, 2))
     CallOperands.push_back(Emit(TREE_OPERAND(exp, 2), 0));
 
   // Loop over the arguments, expanding them and adding them to the op list.
-  std::vector<const Type*> ScalarArgs;
   for (tree arg = TREE_OPERAND(exp, 1); arg; arg = TREE_CHAIN(arg)) {
     tree type = TREE_TYPE(TREE_VALUE(arg));
     const Type *ArgTy = ConvertType(type);
@@ -3243,10 +3300,10 @@ Value *TreeToLLVM::EmitMODIFY_EXPR(tree exp, const MemRef *DestLoc) {
     Builder.Insert(Cast);
     SET_DECL_LLVM(lhs, Cast);
     return Cast;
-  } else if (canEmitRegisterVariable(lhs)) {
-    // If this is a store to a register variable, EmitLV can't handle the dest
-    // (there is no l-value of a register variable).  Emit an inline asm node
-    // that copies the value into the specified register.
+  } else if (canEmitGlobalRegisterVariable(lhs)) {
+    // If this is a store to a global register variable, EmitLV can't handle the
+    // dest (there is no l-value of a global register variable).  Emit an inline
+    // asm node that copies the value into the specified register.
     Value *RHS = Emit(rhs, 0);
     RHS = CastToAnyType(RHS, RHSSigned, ConvertType(TREE_TYPE(lhs)), LHSSigned);
     EmitModifyOfRegisterVariable(lhs, RHS);
@@ -4261,8 +4318,8 @@ Value *TreeToLLVM::EmitRESX_EXPR(tree exp) {
 #define LLVM_CANONICAL_ADDRESS_CONSTRAINTS "r"
 #endif
 
-/// Reads from register variables are handled by emitting an inline asm node
-/// that copies the value out of the specified register.
+ /// Reads from global register variables are handled by emitting an inline
+ /// asm node that copies the value out of the specified register.
 Value *TreeToLLVM::EmitReadOfRegisterVariable(tree decl,
                                               const MemRef *DestLoc) {
   const Type *Ty = ConvertType(TREE_TYPE(decl));
@@ -4287,8 +4344,43 @@ Value *TreeToLLVM::EmitReadOfRegisterVariable(tree decl,
   return Call;
 }
 
-/// Stores to register variables are handled by emitting an inline asm node
-/// that copies the value into the specified register.
+/// Reads from register variables are handled by emitting an inline asm node
+/// that copies the value out of the specified register.
+Value *TreeToLLVM::EmitMoveOfRegVariableToRightReg(Instruction *I, tree var) {
+  // Create a 'call void asm sideeffect "", "{reg}"(Ty %RHS)'.
+  const Type *Ty = I->getType();
+
+  // If there was an error, return something bogus.
+  if (ValidateRegisterVariable(var)) {
+    if (Ty->isSingleValueType())
+      return UndefValue::get(Ty);
+    return 0;   // Just don't copy something into DestLoc.
+  }
+
+  std::vector<const Type*> ArgTys;
+  ArgTys.push_back(Ty);
+  FunctionType *FTy = FunctionType::get(Type::getVoidTy(Context), 
+                                        ArgTys, false);
+  const char *Name = extractRegisterName(var);
+  int RegNum = decode_reg_name(Name);
+  Name = LLVM_GET_REG_NAME(Name, RegNum);
+  InlineAsm *IA = InlineAsm::get(FTy, "", "{"+std::string(Name)+"}", 
+                                    true);
+  CallInst *Call = Builder.CreateCall(IA, I);
+  Call->setDoesNotThrow();
+  // Create another asm with the same reg, this time producing an output.
+  // Turn this into a 'tmp = call Ty asm "", "={reg}"()'.
+  FunctionType *FTy2 = FunctionType::get(Ty, std::vector<const Type*>(),
+                                        false);
+  InlineAsm *IA2 = InlineAsm::get(FTy2, "", "={"+std::string(Name)+"}",
+                                 true);
+  CallInst *Call2 = Builder.CreateCall(IA2);
+  Call2->setDoesNotThrow();
+  return Call2;
+}
+
+/// Stores to global register variables are handled by emitting an inline asm
+/// node that copies the value into the specified register.
 void TreeToLLVM::EmitModifyOfRegisterVariable(tree decl, Value *RHS) {
   // If there was an error, bail out.
   if (ValidateRegisterVariable(decl))
@@ -5479,6 +5571,10 @@ bool TreeToLLVM::EmitBuiltinCall(tree exp, tree fndecl,
     EmitBuiltinUnaryOp(Amt, Result, Intrinsic::ctpop);
     Result = Builder.CreateBinOp(Instruction::And, Result,
                                  ConstantInt::get(Result->getType(), 1));
+    const Type *DestTy = ConvertType(TREE_TYPE(exp));
+    Result = Builder.CreateIntCast(Result, DestTy,
+                                   !TYPE_UNSIGNED(TREE_TYPE(exp)),
+                                   "cast");
     return true;
   }
   case BUILT_IN_POPCOUNT:  // These GCC builtins always return int.
@@ -8380,7 +8476,7 @@ Constant *TreeConstantToLLVM::ConvertRecordCONSTRUCTOR(tree exp) {
     // Zero-sized bitfields upset the type converter.  If it's not a
     // bit-field, or it is a bit-field but it has a non-zero precision
     // type, go ahead and convert it.
-    if (!DECL_BIT_FIELD_TYPE(Field) || TYPE_PRECISION(TREE_TYPE(Field)))
+    if (!isBitfield(Field) || TYPE_PRECISION(TREE_TYPE(Field)))
       Val = Convert(FieldValue);        // Decode the field's value.
 
     if (DECL_SIZE(Field)) {

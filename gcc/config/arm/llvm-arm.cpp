@@ -788,27 +788,27 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
     break;
 
   case NEON_BUILTIN_vaddl:
-    if (datatype == neon_datatype_signed)
-      intID = Intrinsic::arm_neon_vaddls;
-    else if (datatype == neon_datatype_unsigned)
-      intID = Intrinsic::arm_neon_vaddlu;
-    else
+    if (datatype == neon_datatype_signed) {
+      Ops[0] = Builder.CreateSExt(Ops[0], ResultType);
+      Ops[1] = Builder.CreateSExt(Ops[1], ResultType);
+    } else if (datatype == neon_datatype_unsigned) {
+      Ops[0] = Builder.CreateZExt(Ops[0], ResultType);
+      Ops[1] = Builder.CreateZExt(Ops[1], ResultType);
+    } else
       return BadImmediateError(exp, Result);
 
-    intFn = Intrinsic::getDeclaration(TheModule, intID, &ResultType, 1);
-    Result = Builder.CreateCall2(intFn, Ops[0], Ops[1]);
+    Result = Builder.CreateAdd(Ops[0], Ops[1]);
     break;
 
   case NEON_BUILTIN_vaddw:
     if (datatype == neon_datatype_signed)
-      intID = Intrinsic::arm_neon_vaddws;
+      Ops[1] = Builder.CreateSExt(Ops[1], ResultType);
     else if (datatype == neon_datatype_unsigned)
-      intID = Intrinsic::arm_neon_vaddwu;
+      Ops[1] = Builder.CreateZExt(Ops[1], ResultType);
     else
       return BadImmediateError(exp, Result);
 
-    intFn = Intrinsic::getDeclaration(TheModule, intID, &ResultType, 1);
-    Result = Builder.CreateCall2(intFn, Ops[0], Ops[1]);
+    Result = Builder.CreateAdd(Ops[0], Ops[1]);
     break;
 
   case NEON_BUILTIN_vhadd:
@@ -929,15 +929,17 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
         return UnexpectedError("%Hinvalid lane number", exp, Result);
       Ops[2] = BuildDupLane(Ops[2], LaneVal, NUnits, Builder);
     }
-    if (datatype == neon_datatype_signed)
-      intID = Intrinsic::arm_neon_vmlals;
-    else if (datatype == neon_datatype_unsigned)
-      intID = Intrinsic::arm_neon_vmlalu;
-    else
+    if (datatype == neon_datatype_signed) {
+      Ops[1] = Builder.CreateSExt(Ops[1], ResultType);
+      Ops[2] = Builder.CreateSExt(Ops[2], ResultType);
+    } else if (datatype == neon_datatype_unsigned) {
+      Ops[1] = Builder.CreateZExt(Ops[1], ResultType);
+      Ops[2] = Builder.CreateZExt(Ops[2], ResultType);
+    } else
       return BadImmediateError(exp, Result);
 
-    intFn = Intrinsic::getDeclaration(TheModule, intID, &ResultType, 1);
-    Result = Builder.CreateCall3(intFn, Ops[0], Ops[1], Ops[2]);
+    Ops[1] = Builder.CreateMul(Ops[1], Ops[2]);
+    Result = Builder.CreateAdd(Ops[0], Ops[1]);
     break;
 
   case NEON_BUILTIN_vmlsl_lane:
@@ -952,15 +954,17 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
         return UnexpectedError("%Hinvalid lane number", exp, Result);
       Ops[2] = BuildDupLane(Ops[2], LaneVal, NUnits, Builder);
     }
-    if (datatype == neon_datatype_signed)
-      intID = Intrinsic::arm_neon_vmlsls;
-    else if (datatype == neon_datatype_unsigned)
-      intID = Intrinsic::arm_neon_vmlslu;
-    else
+    if (datatype == neon_datatype_signed) {
+      Ops[1] = Builder.CreateSExt(Ops[1], ResultType);
+      Ops[2] = Builder.CreateSExt(Ops[2], ResultType);
+    } else if (datatype == neon_datatype_unsigned) {
+      Ops[1] = Builder.CreateZExt(Ops[1], ResultType);
+      Ops[2] = Builder.CreateZExt(Ops[2], ResultType);
+    } else
       return BadImmediateError(exp, Result);
 
-    intFn = Intrinsic::getDeclaration(TheModule, intID, &ResultType, 1);
-    Result = Builder.CreateCall3(intFn, Ops[0], Ops[1], Ops[2]);
+    Ops[1] = Builder.CreateMul(Ops[1], Ops[2]);
+    Result = Builder.CreateSub(Ops[0], Ops[1]);
     break;
 
   case NEON_BUILTIN_vqdmulh_lane:
@@ -1040,17 +1044,22 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
         return UnexpectedError("%Hinvalid lane number", exp, Result);
       Ops[1] = BuildDupLane(Ops[1], LaneVal, NUnits, Builder);
     }
-    if (datatype == neon_datatype_polynomial)
+    if (datatype == neon_datatype_polynomial) {
       intID = Intrinsic::arm_neon_vmullp;
-    else if (datatype == neon_datatype_signed)
-      intID = Intrinsic::arm_neon_vmulls;
-    else if (datatype == neon_datatype_unsigned)
-      intID = Intrinsic::arm_neon_vmullu;
-    else
+      intFn = Intrinsic::getDeclaration(TheModule, intID, &ResultType, 1);
+      Result = Builder.CreateCall2(intFn, Ops[0], Ops[1]);
+      break;
+    }
+    if (datatype == neon_datatype_signed) {
+      Ops[0] = Builder.CreateSExt(Ops[0], ResultType);
+      Ops[1] = Builder.CreateSExt(Ops[1], ResultType);
+    } else if (datatype == neon_datatype_unsigned) {
+      Ops[0] = Builder.CreateZExt(Ops[0], ResultType);
+      Ops[1] = Builder.CreateZExt(Ops[1], ResultType);
+    } else
       return BadImmediateError(exp, Result);
 
-    intFn = Intrinsic::getDeclaration(TheModule, intID, &ResultType, 1);
-    Result = Builder.CreateCall2(intFn, Ops[0], Ops[1]);
+    Result = Builder.CreateMul(Ops[0], Ops[1]);
     break;
 
   case NEON_BUILTIN_vqdmull_n:
@@ -1251,27 +1260,27 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
     break;
 
   case NEON_BUILTIN_vsubl:
-    if (datatype == neon_datatype_signed)
-      intID = Intrinsic::arm_neon_vsubls;
-    else if (datatype == neon_datatype_unsigned)
-      intID = Intrinsic::arm_neon_vsublu;
-    else
+    if (datatype == neon_datatype_signed) {
+      Ops[0] = Builder.CreateSExt(Ops[0], ResultType);
+      Ops[1] = Builder.CreateSExt(Ops[1], ResultType);
+    } else if (datatype == neon_datatype_unsigned) {
+      Ops[0] = Builder.CreateZExt(Ops[0], ResultType);
+      Ops[1] = Builder.CreateZExt(Ops[1], ResultType);
+    } else
       return BadImmediateError(exp, Result);
 
-    intFn = Intrinsic::getDeclaration(TheModule, intID, &ResultType, 1);
-    Result = Builder.CreateCall2(intFn, Ops[0], Ops[1]);
+    Result = Builder.CreateSub(Ops[0], Ops[1]);
     break;
 
   case NEON_BUILTIN_vsubw:
     if (datatype == neon_datatype_signed)
-      intID = Intrinsic::arm_neon_vsubws;
+      Ops[1] = Builder.CreateSExt(Ops[1], ResultType);
     else if (datatype == neon_datatype_unsigned)
-      intID = Intrinsic::arm_neon_vsubwu;
+      Ops[1] = Builder.CreateZExt(Ops[1], ResultType);
     else
       return BadImmediateError(exp, Result);
 
-    intFn = Intrinsic::getDeclaration(TheModule, intID, &ResultType, 1);
-    Result = Builder.CreateCall2(intFn, Ops[0], Ops[1]);
+    Result = Builder.CreateSub(Ops[0], Ops[1]);
     break;
 
   case NEON_BUILTIN_vqsub:
@@ -1403,41 +1412,53 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
     Result = Builder.CreateCall2(intFn, Ops[0], Ops[1]);
     break;
 
-  case NEON_BUILTIN_vabdl:
+  case NEON_BUILTIN_vabdl: {
     if (datatype == neon_datatype_signed)
-      intID = Intrinsic::arm_neon_vabdls;
+      intID = Intrinsic::arm_neon_vabds;
     else if (datatype == neon_datatype_unsigned)
-      intID = Intrinsic::arm_neon_vabdlu;
+      intID = Intrinsic::arm_neon_vabdu;
     else
       return BadImmediateError(exp, Result);
 
-    intFn = Intrinsic::getDeclaration(TheModule, intID, &ResultType, 1);
-    Result = Builder.CreateCall2(intFn, Ops[0], Ops[1]);
+    const VectorType *VTy = dyn_cast<const VectorType>(ResultType);
+    assert(VTy && "expected a vector type for vabdl result");
+    const llvm::Type *DTy = VectorType::getTruncatedElementVectorType(VTy);
+    intFn = Intrinsic::getDeclaration(TheModule, intID, &DTy, 1);
+    Ops[0] = Builder.CreateCall2(intFn, Ops[0], Ops[1]);
+    Result = Builder.CreateZExt(Ops[0], ResultType);
     break;
+  }
 
   case NEON_BUILTIN_vaba:
     if (datatype == neon_datatype_signed)
-      intID = Intrinsic::arm_neon_vabas;
+      intID = Intrinsic::arm_neon_vabds;
     else if (datatype == neon_datatype_unsigned)
-      intID = Intrinsic::arm_neon_vabau;
+      intID = Intrinsic::arm_neon_vabdu;
     else
       return BadImmediateError(exp, Result);
 
     intFn = Intrinsic::getDeclaration(TheModule, intID, &ResultType, 1);
-    Result = Builder.CreateCall3(intFn, Ops[0], Ops[1], Ops[2]);
+    Ops[1] = Builder.CreateCall2(intFn, Ops[1], Ops[2]);
+    Result = Builder.CreateAdd(Ops[0], Ops[1]);
     break;
 
-  case NEON_BUILTIN_vabal:
+  case NEON_BUILTIN_vabal: {
     if (datatype == neon_datatype_signed)
-      intID = Intrinsic::arm_neon_vabals;
+      intID = Intrinsic::arm_neon_vabds;
     else if (datatype == neon_datatype_unsigned)
-      intID = Intrinsic::arm_neon_vabalu;
+      intID = Intrinsic::arm_neon_vabdu;
     else
       return BadImmediateError(exp, Result);
 
-    intFn = Intrinsic::getDeclaration(TheModule, intID, &ResultType, 1);
-    Result = Builder.CreateCall3(intFn, Ops[0], Ops[1], Ops[2]);
+    const VectorType *VTy = dyn_cast<const VectorType>(ResultType);
+    assert(VTy && "expected a vector type for vabal result");
+    const llvm::Type *DTy = VectorType::getTruncatedElementVectorType(VTy);
+    intFn = Intrinsic::getDeclaration(TheModule, intID, &DTy, 1);
+    Ops[1] = Builder.CreateCall2(intFn, Ops[1], Ops[2]);
+    Ops[1] = Builder.CreateZExt(Ops[1], ResultType);
+    Result = Builder.CreateAdd(Ops[0], Ops[1]);
     break;
+  }
 
   case NEON_BUILTIN_vmax:
     if (datatype == neon_datatype_float ||
@@ -1718,11 +1739,9 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
   case NEON_BUILTIN_vmovn:
     if (datatype == neon_datatype_signed ||
         datatype == neon_datatype_unsigned)
-      intID = Intrinsic::arm_neon_vmovn;
+      Result = Builder.CreateTrunc(Ops[0], ResultType);
     else
       return BadImmediateError(exp, Result);
-    intFn = Intrinsic::getDeclaration(TheModule, intID, &ResultType, 1);
-    Result = Builder.CreateCall(intFn, Ops[0]);
     break;
 
   case NEON_BUILTIN_vqmovn:
@@ -1747,13 +1766,11 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
 
   case NEON_BUILTIN_vmovl:
     if (datatype == neon_datatype_signed)
-      intID = Intrinsic::arm_neon_vmovls;
+      Result = Builder.CreateSExt(Ops[0], ResultType);
     else if (datatype == neon_datatype_unsigned)
-      intID = Intrinsic::arm_neon_vmovlu;
+      Result = Builder.CreateZExt(Ops[0], ResultType);
     else
       return BadImmediateError(exp, Result);
-    intFn = Intrinsic::getDeclaration(TheModule, intID, &ResultType, 1);
-    Result = Builder.CreateCall(intFn, Ops[0]);
     break;
 
   case NEON_BUILTIN_vext: {
@@ -2012,7 +2029,9 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
     intID = Intrinsic::arm_neon_vld1;
     intFn = Intrinsic::getDeclaration(TheModule, intID, &ResultType, 1);
     Type *VPTy = PointerType::getUnqual(Type::getInt8Ty(Context));
-    Result = Builder.CreateCall(intFn, BitCastToType(Ops[0], VPTy));
+    unsigned Align = getPointerAlignment(TREE_VALUE(TREE_OPERAND(exp, 1)));
+    Result = Builder.CreateCall2(intFn, BitCastToType(Ops[0], VPTy),
+                                 getInt32Const(Align));
     break;
   }
 
@@ -2030,7 +2049,9 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
     }
     intFn = Intrinsic::getDeclaration(TheModule, intID, &VTy, 1);
     Type *VPTy = PointerType::getUnqual(Type::getInt8Ty(Context));
-    Result = Builder.CreateCall(intFn, BitCastToType(Ops[0], VPTy));
+    unsigned Align = getPointerAlignment(TREE_VALUE(TREE_OPERAND(exp, 1)));
+    Result = Builder.CreateCall2(intFn, BitCastToType(Ops[0], VPTy),
+                                 getInt32Const(Align));
     Builder.CreateStore(Result, DestLoc->Ptr);
     Result = 0;
     break;
@@ -2076,6 +2097,8 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
       Args.push_back(Builder.CreateExtractValue(Ops[1], n));
     }
     Args.push_back(Ops[2]); // lane number
+    unsigned Align = getPointerAlignment(TREE_VALUE(TREE_OPERAND(exp, 1)));
+    Args.push_back(getInt32Const(Align));
     Result = Builder.CreateCall(intFn, Args.begin(), Args.end());
     Builder.CreateStore(Result, DestLoc->Ptr);
     Result = 0;
@@ -2105,7 +2128,9 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
       }
       intFn = Intrinsic::getDeclaration(TheModule, intID, intOpTypes, 1);
       Type *VPTy = PointerType::getUnqual(Type::getInt8Ty(Context));
-      Result = Builder.CreateCall(intFn, BitCastToType(Ops[0], VPTy));
+      unsigned Align = getPointerAlignment(TREE_VALUE(TREE_OPERAND(exp, 1)));
+      Result = Builder.CreateCall2(intFn, BitCastToType(Ops[0], VPTy),
+                                   getInt32Const(Align));
       Builder.CreateStore(Result, DestLoc->Ptr);
       Result = 0;
       break;
@@ -2133,6 +2158,8 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
       Args.push_back(UndefValue::get(VTy));
     }
     Args.push_back(getInt32Const(0));
+    unsigned Align = getPointerAlignment(TREE_VALUE(TREE_OPERAND(exp, 1)));
+    Args.push_back(getInt32Const(Align));
     Result = Builder.CreateCall(intFn, Args.begin(), Args.end());
 
     // Now splat the values in lane 0 to the rest of the elements.
@@ -2152,7 +2179,9 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
     intID = Intrinsic::arm_neon_vst1;
     intFn = Intrinsic::getDeclaration(TheModule, intID, &VTy, 1);
     Type *VPTy = PointerType::getUnqual(Type::getInt8Ty(Context));
-    Builder.CreateCall2(intFn, BitCastToType(Ops[0], VPTy), Ops[1]);
+    unsigned Align = getPointerAlignment(TREE_VALUE(TREE_OPERAND(exp, 1)));
+    Builder.CreateCall3(intFn, BitCastToType(Ops[0], VPTy), Ops[1],
+                        getInt32Const(Align));
     Result = 0;
     break;
   }
@@ -2183,6 +2212,8 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
     for (unsigned n = 0; n != NumVecs; ++n) {
       Args.push_back(Builder.CreateExtractValue(Ops[1], n));
     }
+    unsigned Align = getPointerAlignment(TREE_VALUE(TREE_OPERAND(exp, 1)));
+    Args.push_back(getInt32Const(Align));
     Builder.CreateCall(intFn, Args.begin(), Args.end());
     Result = 0;
     break;
@@ -2228,6 +2259,8 @@ bool TreeToLLVM::TargetIntrinsicLower(tree exp,
       Args.push_back(Builder.CreateExtractValue(Ops[1], n));
     }
     Args.push_back(Ops[2]); // lane number
+    unsigned Align = getPointerAlignment(TREE_VALUE(TREE_OPERAND(exp, 1)));
+    Args.push_back(getInt32Const(Align));
     Builder.CreateCall(intFn, Args.begin(), Args.end());
     Result = 0;
     break;
@@ -2524,6 +2557,91 @@ static void push_elts(const Type *Ty, std::vector<const Type*> &Elts)
   }
 }
 
+static unsigned count_num_words(std::vector<const Type*> &ScalarElts) {
+  unsigned NumWords = 0;
+  for (unsigned i = 0, e = ScalarElts.size(); i != e; ++i) {
+    const Type *Ty = ScalarElts[i];
+    if (Ty->isPointerTy()) {
+      NumWords++;
+    } else if (Ty->isIntegerTy()) {
+      const unsigned TypeSize = Ty->getPrimitiveSizeInBits();
+      const unsigned NumWordsForType = (TypeSize + 31) / 32;
+
+      NumWords += NumWordsForType;
+    } else {
+      assert (0 && "Unexpected type.");
+    }
+  }
+  return NumWords;
+}
+
+// This function is used only on AAPCS. The difference from the generic
+// handling of arguments is that arguments larger than 32 bits are split
+// and padding arguments are added as necessary for alignment. This makes
+// the IL a bit more explicit about how arguments are handled.
+extern bool
+llvm_arm_try_pass_aggregate_custom(tree type,
+                                   std::vector<const Type*>& ScalarElts,
+				   CallingConv::ID& CC,
+				   struct DefaultABIClient* C) {
+  if (CC != CallingConv::ARM_AAPCS && CC != CallingConv::C)
+    return false;
+
+  if (CC == CallingConv::C && !TARGET_AAPCS_BASED)
+    return false;
+
+  if (TARGET_HARD_FLOAT_ABI)
+    return false;
+  const Type *Ty = ConvertType(type);
+  if (Ty->isPointerTy())
+    return false;
+
+  const unsigned Size = TREE_INT_CST_LOW(TYPE_SIZE(type))/8;
+  const unsigned Alignment = TYPE_ALIGN(type)/8;
+  const unsigned NumWords = count_num_words(ScalarElts);
+  const bool AddPad = Alignment >= 8 && (NumWords % 2);
+
+  // First, build a type that will be bitcast to the original one and
+  // from where elements will be extracted.
+  std::vector<const Type*> Elts;
+  const Type* Int32Ty = Type::getInt32Ty(getGlobalContext());
+  const unsigned NumRegularArgs = Size / 4;
+  for (unsigned i = 0; i < NumRegularArgs; ++i) {
+    Elts.push_back(Int32Ty);
+  }
+  const unsigned RestSize = Size % 4;
+  const llvm::Type *RestType = NULL;
+  if (RestSize> 2) {
+    RestType = Type::getInt32Ty(getGlobalContext());
+  } else if (RestSize > 1) {
+    RestType = Type::getInt16Ty(getGlobalContext());
+  } else if (RestSize > 0) {
+    RestType = Type::getInt8Ty(getGlobalContext());
+  }
+  if (RestType)
+    Elts.push_back(RestType);
+  const StructType *STy = StructType::get(getGlobalContext(), Elts, false);
+
+  if (AddPad) {
+    ScalarElts.push_back(Int32Ty);
+    C->HandlePad(Int32Ty);
+  }
+
+  for (unsigned i = 0; i < NumRegularArgs; ++i) {
+    C->EnterField(i, STy);
+    C->HandleScalarArgument(Int32Ty, 0);
+    ScalarElts.push_back(Int32Ty);
+    C->ExitField();
+  }
+  if (RestType) {
+    C->EnterField(NumRegularArgs, STy);
+    C->HandleScalarArgument(RestType, 0, RestSize);
+    ScalarElts.push_back(RestType);
+    C->ExitField();
+  }
+  return true;
+}
+
 // Target hook for llvm-abi.h. It returns true if an aggregate of the
 // specified type should be passed in a number of registers of mixed types.
 // It also returns a vector of types that correspond to the registers used
@@ -2625,7 +2743,6 @@ static bool count_num_registers_uses(std::vector<const Type*> &ScalarElts,
 bool
 llvm_arm_aggregate_partially_passed_in_regs(std::vector<const Type*> &Elts,
                                             std::vector<const Type*> &ScalarElts,
-                                            bool isShadowReturn,
                                             CallingConv::ID &CC) {
   // Homogeneous aggregates are an AAPCS-VFP feature.
   if ((CC != CallingConv::ARM_AAPCS_VFP) ||

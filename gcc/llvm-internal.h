@@ -190,6 +190,10 @@ bool isInt64(tree_node *t, bool Unsigned);
 /// overflowed constants.  These conditions can be checked by calling isInt64.
 uint64_t getInt64(tree_node *t, bool Unsigned);
 
+/// getPointerAlignment - Return the alignment in bytes of exp, a pointer valued
+/// expression, or 1 if the alignment is not known.
+unsigned int getPointerAlignment(tree_node *exp);
+
 /// isPassedByInvisibleReference - Return true if the specified type should be
 /// passed by 'invisible reference'. In other words, instead of passing the
 /// thing by value, pass the address of a temporary.
@@ -316,6 +320,9 @@ class TreeToLLVM {
   /// PostPads - The post landing pad for a given EH region.
   IndexedMap<BasicBlock *> PostPads;
 
+  /// CatchAll - Language specific catch-all object.
+  GlobalVariable *CatchAll;
+
   /// ExceptionValue - Is the local to receive the current exception.
   Value *ExceptionValue;
 
@@ -386,7 +393,7 @@ public:
   /// CreateTemporary - Create a new alloca instruction of the specified type,
   /// inserting it into the entry block and returning it.  The resulting
   /// instruction's type is a pointer to the specified type.
-  AllocaInst *CreateTemporary(const Type *Ty);
+  AllocaInst *CreateTemporary(const Type *Ty, unsigned align=0);
 
   /// CreateTempLoc - Like CreateTemporary, but returns a MemRef.
   MemRef CreateTempLoc(const Type *Ty);
@@ -536,6 +543,7 @@ private:
   Value *EmitASM_EXPR(tree_node *exp);
   Value *EmitReadOfRegisterVariable(tree_node *vardecl, const MemRef *DestLoc);
   void EmitModifyOfRegisterVariable(tree_node *vardecl, Value *RHS);
+  Value *EmitMoveOfRegVariableToRightReg(Instruction *I, tree_node *decl);
 
   // Helpers for Builtin Function Expansion.
   void EmitMemoryBarrier(bool ll, bool ls, bool sl, bool ss, bool device);

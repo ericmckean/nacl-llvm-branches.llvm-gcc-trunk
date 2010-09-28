@@ -210,7 +210,6 @@ DebugInfo::DebugInfo(Module *m)
 , PrevLineNo(0)
 , PrevBB(NULL)
 , CurrentGCCLexicalBlock(NULL)
-, FwdTypeCount(0)
 , RegionStack()
 {}
 
@@ -506,7 +505,7 @@ DIDescriptor DebugInfo::findRegion(tree exp) {
 
   std::map<tree_node *, WeakVH>::iterator I = RegionMap.find(Node);
   if (I != RegionMap.end())
-    if (MDNode *R = dyn_cast_or_null<MDNode>(I->second))
+    if (MDNode *R = dyn_cast_or_null<MDNode>(&*I->second))
       return DIDescriptor(R);
 
   if (TYPE_P (Node)) {
@@ -772,15 +771,7 @@ DIType DebugInfo::createMethodType(tree type) {
 
   // Create a  place holder type first. The may be used as a context
   // for the argument types.
-  char *FwdTypeName = (char *)alloca(65);
-  sprintf(FwdTypeName, "fwd.type.%d", FwdTypeCount++);
-  llvm::DIType FwdType = 
-    DebugFactory.CreateCompositeType(llvm::dwarf::DW_TAG_subroutine_type,
-                                     findRegion(TYPE_CONTEXT(type)),
-                                     FwdTypeName,
-                                     getOrCreateFile(main_input_filename),
-                                     0, 0, 0, 0, 0,
-                                     llvm::DIType(), llvm::DIArray());
+  llvm::DIType FwdType = DebugFactory.CreateTemporaryType();
   llvm::MDNode *FTN = FwdType;
   llvm::TrackingVH<llvm::MDNode> FwdTypeNode = FTN;
   TypeCache[type] = WeakVH(FwdType);
@@ -826,7 +817,7 @@ DIType DebugInfo::createMethodType(tree type) {
 
   // Now that we have a real decl for the struct, replace anything using the
   // old decl with the new one.  This will recursively update the debug info.
-  llvm::DIDerivedType(FwdTypeNode).replaceAllUsesWith(RealType);
+  llvm::DIType(FwdTypeNode).replaceAllUsesWith(RealType);
 
   return RealType;
 }
@@ -1002,19 +993,6 @@ DIType DebugInfo::createStructType(tree type) {
   // recursive) and replace all  uses of the forward declaration with the 
   // final definition. 
   expanded_location Loc = GetNodeLocation(TREE_CHAIN(type), false);
-  // FIXME: findRegion() is not able to find context all the time. This
-  // means when type names in different context match then FwdDecl is
-  // reused because MDNodes are uniqued. To avoid this, use type context
-  /// also while creating FwdDecl for now.
-  std::string FwdName;
-  if (TYPE_CONTEXT(type)) {
-    StringRef TypeContextName = GetNodeName(TYPE_CONTEXT(type));
-    if (!TypeContextName.empty())
-      FwdName = TypeContextName;
-  }
-  StringRef TypeName = GetNodeName(type);
-  if (!TypeName.empty())
-    FwdName = FwdName + TypeName.data();
   unsigned SFlags = 0;
   if (TYPE_BLOCK_IMPL_STRUCT(type))
     SFlags |= llvm::DIType::FlagAppleBlock;
@@ -1026,22 +1004,25 @@ DIType DebugInfo::createStructType(tree type) {
   // descriptor. 
   std::map<tree_node *, WeakVH >::iterator I = TypeCache.find(type);
   if (I != TypeCache.end())
-    if (MDNode *TN = dyn_cast_or_null<MDNode>(I->second))
+    if (MDNode *TN = dyn_cast_or_null<MDNode>(&*I->second))
       return DIType(TN);
   
-  llvm::DICompositeType FwdDecl =
-    DebugFactory.CreateCompositeType(Tag, 
-                                     TyContext,
-                                     FwdName.c_str(),
-                                     getOrCreateFile(Loc.file), 
-                                     Loc.line, 
-                                     0, 0, 0, SFlags | llvm::DIType::FlagFwdDecl,
-                                     llvm::DIType(), llvm::DIArray(),
-                                     RunTimeLang);
-  
   // forward declaration, 
-  if (TYPE_SIZE(type) == 0) 
+  if (TYPE_SIZE(type) == 0) {
+    llvm::DICompositeType FwdDecl =
+      DebugFactory.CreateCompositeType(Tag, 
+                                       TyContext,
+                                       GetNodeName(type),
+                                       getOrCreateFile(Loc.file), 
+                                       Loc.line, 
+                                       0, 0, 0,
+                                       SFlags | llvm::DIType::FlagFwdDecl,
+                                       llvm::DIType(), llvm::DIArray(),
+                                       RunTimeLang);
     return FwdDecl;
+  }
+  
+  llvm::DIType FwdDecl = DebugFactory.CreateTemporaryType();
   
   // Insert into the TypeCache so that recursive uses will find it.
   llvm::MDNode *FDN = FwdDecl;
@@ -1203,7 +1184,7 @@ DIType DebugInfo::createStructType(tree type) {
 
   // Now that we have a real decl for the struct, replace anything using the
   // old decl with the new one.  This will recursively update the debug info.
-  llvm::DIDerivedType(FwdDeclNode).replaceAllUsesWith(RealDecl);
+  llvm::DIType(FwdDeclNode).replaceAllUsesWith(RealDecl);
 
   return RealDecl;
 }
