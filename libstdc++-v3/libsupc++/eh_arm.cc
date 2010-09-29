@@ -160,6 +160,21 @@ extern "C" void __cxa_end_cleanup(void) {
 #endif
 }
 
+
+// @LOCALMOD-START
+// temporary hack to make a symbol available which really should come from
+// libgcc_eh. Sadly we currently do not build libgcc_eh anymore.
+
+extern "C" _Unwind_Reason_Code 
+_Unwind_Resume_or_Rethrow(_Unwind_Control_Block *) {
+  abort();
+  return _Unwind_Reason_Code(0);
+}
+
+// @LOCALMOD-END
+
+
+
 #else
 // Assembly wrapper to call __gnu_end_cleanup without clobbering r1-r3.
 // Also push r4 to preserve stack alignment.
