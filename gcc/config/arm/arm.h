@@ -402,6 +402,9 @@ enum float_abi_type
 
 extern enum float_abi_type arm_float_abi;
 
+/* @LOCALMOD-BEGIN */
+#define TARGET_DEFAULT_FLOAT_ABI ARM_FLOAT_ABI_HARD
+/* @LOCALMOD-END */
 #ifndef TARGET_DEFAULT_FLOAT_ABI
 #define TARGET_DEFAULT_FLOAT_ABI ARM_FLOAT_ABI_SOFT
 #endif

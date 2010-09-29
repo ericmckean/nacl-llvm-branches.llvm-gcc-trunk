@@ -146,6 +146,21 @@ __gnu_end_cleanup(void)
   return &header->unwindHeader;
 }
 
+extern "C" void abort(void);
+// @LOCALMOD
+// TODO(robertm): this now cliobbers the register
+#if 1
+extern "C" void __cxa_end_cleanup(void) {
+#ifdef __native_client__
+      // TODO(espindola): figure out how we are going to handle exceptions on
+      // native client.
+      abort();
+#else
+  _Unwind_Resume(__gnu_end_cleanup());
+#endif
+}
+
+#else
 // Assembly wrapper to call __gnu_end_cleanup without clobbering r1-r3.
 // Also push r4 to preserve stack alignment.
 #ifdef __thumb__
@@ -166,5 +181,5 @@ asm (".global __cxa_end_cleanup\n"
 "	ldmfd\tsp!, {r1, r2, r3, r4}\n"
 "	bl\t_Unwind_Resume @ Never returns\n");
 #endif
-
+#endif
 #endif

@@ -6742,7 +6742,21 @@ build_common_tree_nodes_2 (int short_double)
   layout_type (complex_long_double_type_node);
 
   {
-    tree t = targetm.build_builtin_va_list ();
+    /* @LOCALMOD-BEGIN */
+    tree t;
+    if (flag_expand_va_arg)
+        t = targetm.build_builtin_va_list ();
+    else
+      {
+        /* If not expanding va_arg, make va_list large enough
+           so that the generated bitcode will work on all platforms.
+           (e.g., X86-64 needs exactly 24-bytes for va_list) */
+
+        t = build_array_type (
+                char_type_node,
+                build_index_type (build_int_cst (NULL_TREE, 24-1)));
+      }
+    /* @LOCALMOD-END */
 
     /* Many back-ends define record types without setting TYPE_NAME.
        If we copied the record type here, we'd keep the original

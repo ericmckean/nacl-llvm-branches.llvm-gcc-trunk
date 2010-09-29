@@ -530,7 +530,7 @@ Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 #define TARGET_SPLIT_COMPLEX_ARG NULL
 
-#define TARGET_GIMPLIFY_VA_ARG_EXPR std_gimplify_va_arg_expr
+#define TARGET_GIMPLIFY_VA_ARG_EXPR pnacl_gimplify_va_arg_expr
 #define TARGET_PASS_BY_REFERENCE hook_bool_CUMULATIVE_ARGS_mode_tree_bool_false
 
 #define TARGET_RELAXED_ORDERING false

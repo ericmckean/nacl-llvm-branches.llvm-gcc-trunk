@@ -4586,6 +4586,8 @@ extern tree mathfn_built_in (tree, enum built_in_function fn);
 extern tree strip_float_extensions (tree);
 extern tree c_strlen (tree, int);
 extern tree std_gimplify_va_arg_expr (tree, tree, tree *, tree *);
+extern tree std_gimplify_va_arg_expr (tree, tree, tree *, tree *);
+extern tree pnacl_gimplify_va_arg_expr (tree, tree, tree *, tree *);
 extern tree build_va_arg_indirect_ref (tree);
 tree build_string_literal (int, const char *);
 
