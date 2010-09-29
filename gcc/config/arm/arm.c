@@ -456,8 +456,25 @@ static tree arm_md_asm_clobbers (tree, tree, tree);
 #undef TARGET_ASM_TTYPE
 #define TARGET_ASM_TTYPE arm_output_ttype
 
+/* @LOCALMOD-START */
+/* Remove ARM bias in bitcode generated for exception handling 
+ * NOTE: LLVM abstracts away unwind table generation so we can ignore this here
+ * 
+ * The ARM bias mentioned above is reflected by if statements like:
+ *   if (targetm.arm_eabi_unwinder)
+ *
+ * Concretely, in gcc/cp/except.c we now use:
+ * _Unwind_Resume_or_Rethrow instead of  __cxa_end_cleanup 
+ *
+ * Note, We may needs to do something similar for  TARGET_CXX_USE_AEABI_ATEXIT
+ * which controls the use of __aeabi_atexit via targetm.cxx.use_aeabi_atexit
+ */
+/*
 #undef TARGET_ARM_EABI_UNWINDER
 #define TARGET_ARM_EABI_UNWINDER true
+*/
+/* @LOCALMOD-END  */
+
 #endif /* TARGET_UNWIND_INFO */
 
 /* APPLE LOCAL begin v7 support. Merge from mainline */
