@@ -159,11 +159,6 @@ save_caught_exception(struct _Unwind_Exception* ue_header,
 		      const unsigned char* action_record
 			__attribute__((__unused__)))
 {
-#ifdef __native_client__
-      // TODO(espindola): figure out how we are going to handle exceptions on
-      // native client.
-      abort();
-#else
     ue_header->barrier_cache.sp = _Unwind_GetGR(context, 13);
     ue_header->barrier_cache.bitpattern[0] = (_uw) thrown_ptr;
     ue_header->barrier_cache.bitpattern[1]
@@ -171,7 +166,6 @@ save_caught_exception(struct _Unwind_Exception* ue_header,
     ue_header->barrier_cache.bitpattern[2]
       = (_uw) language_specific_data;
     ue_header->barrier_cache.bitpattern[3] = (_uw) landing_pad;
-#endif
 }
 
 
@@ -189,18 +183,6 @@ restore_caught_exception(struct _Unwind_Exception* ue_header,
   landing_pad = (_Unwind_Ptr) ue_header->barrier_cache.bitpattern[3];
 }
 
-#ifdef __native_client__
-      // TODO(espindola): figure out how we are going to handle exceptions on
-      // native client.
-#define CONTINUE_UNWINDING \
-  do								\
-    {								\
-      abort();							\
-    }								\
-  while (0)
-
-#else
-
 #define CONTINUE_UNWINDING \
   do								\
     {								\
@@ -209,7 +191,6 @@ restore_caught_exception(struct _Unwind_Exception* ue_header,
       return _URC_CONTINUE_UNWIND;				\
     }								\
   while (0)
-#endif
 
 #else
 typedef const std::type_info _throw_typet;
@@ -399,14 +380,8 @@ PERSONALITY_FUNCTION (int version,
 
     case _US_UNWIND_FRAME_STARTING:
       actions = _UA_CLEANUP_PHASE;
-#ifdef __native_client__
-      // TODO(espindola): figure out how we are going to handle exceptions on
-      // native client.
-      abort();
-#else
       if (!(state & _US_FORCE_UNWIND)
 	  && ue_header->barrier_cache.sp == _Unwind_GetGR(context, 13))
-#endif
 	actions |= _UA_HANDLER_FRAME;
       break;
 
@@ -429,13 +404,7 @@ PERSONALITY_FUNCTION (int version,
   // the exception header (UCB).  To avoid rewriting everything we make the
   // virtual IP register point at the UCB.
   ip = (_Unwind_Ptr) ue_header;
-#ifdef __native_client__
-      // TODO(espindola): figure out how we are going to handle exceptions on
-      // native client.
-      abort();
-#else
   _Unwind_SetGR(context, 12, ip);
-#endif
 
 #else
   __cxa_exception* xh = __get_exception_header_from_ue(ue_header);
@@ -469,13 +438,7 @@ PERSONALITY_FUNCTION (int version,
 #ifdef HAVE_GETIPINFO
   ip = _Unwind_GetIPInfo (context, &ip_before_insn);
 #else
-  #ifdef __native_client__
-      // TODO(espindola): figure out how we are going to handle exceptions on
-      // native client.
-      abort();
-#else
   ip = _Unwind_GetIP (context);
-#endif
 #endif
   if (! ip_before_insn)
     --ip;
@@ -716,17 +679,11 @@ PERSONALITY_FUNCTION (int version,
   /* For targets with pointers smaller than the word size, we must extend the
      pointer, and this extension is target dependent.  */
 
-#ifdef __native_client__
-      // TODO(espindola): figure out how we are going to handle exceptions on
-      // native client.
-      abort();
-#else
   _Unwind_SetGR (context, __builtin_eh_return_data_regno (0),
 		 __builtin_extend_pointer (ue_header));
   _Unwind_SetGR (context, __builtin_eh_return_data_regno (1),
 		 handler_switch_value);
   _Unwind_SetIP (context, landing_pad);
-#endif
 
 #ifdef __ARM_EABI_UNWINDER__
   if (found_type == found_cleanup)

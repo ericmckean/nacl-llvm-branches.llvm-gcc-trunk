@@ -114,13 +114,7 @@ __cxxabiv1::__cxa_end_catch ()
   if (!__is_gxx_exception_class(header->unwindHeader.exception_class))
     {
       globals->caughtExceptions = 0;
-#ifdef __native_client__
-      // TODO(espindola): figure out how we are going to handle exceptions on
-      // native client.
-      abort();
-#else
       _Unwind_DeleteException (&header->unwindHeader);
-#endif
       return;
     }
 
@@ -136,13 +130,7 @@ __cxxabiv1::__cxa_end_catch ()
     {
       // Handling for this exception is complete.  Destroy the object.
       globals->caughtExceptions = header->nextException;
-#ifdef __native_client__
-      // TODO(espindola): figure out how we are going to handle exceptions on
-      // native client.
-      abort();
-#else
       _Unwind_DeleteException (&header->unwindHeader);
-#endif
       return;
     }
   else if (count < 0)

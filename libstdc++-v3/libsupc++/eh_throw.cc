@@ -69,13 +69,7 @@ __cxxabiv1::__cxa_throw (void *obj, std::type_info *tinfo,
 #ifdef _GLIBCXX_SJLJ_EXCEPTIONS
   _Unwind_SjLj_RaiseException (&header->unwindHeader);
 #else
-#ifdef __native_client__
-      // TODO(espindola): figure out how we are going to handle exceptions on
-      // native client.
-      abort();
-#else
   _Unwind_RaiseException (&header->unwindHeader);
-#endif
 #endif
 
   // Some sort of unwinding error.  Note that terminate is a handler.
@@ -106,13 +100,7 @@ __cxxabiv1::__cxa_rethrow ()
 #if defined(_LIBUNWIND_STD_ABI)
       _Unwind_RaiseException (&header->unwindHeader);
 #else
-#ifdef __native_client__
-      // TODO(espindola): figure out how we are going to handle exceptions on
-      // native client.
-      abort();
-#else
       _Unwind_Resume_or_Rethrow (&header->unwindHeader);
-#endif
 #endif
 #endif
   
