@@ -218,7 +218,9 @@ for ml in $MULTILIBS; do
   shlib_slibdir_qual=
   libgcc_a=$dir/libgcc.a
   libgcov_a=$dir/libgcov.a
-  libgcc_eh_a=
+  # @LOCALMOD 
+  # always enable creation of libgcc_eh.a
+  libgcc_eh_a=$dir/libgcc_eh.a
   libgcc_s_so=
   libunwind_a=
   libunwind_so=
@@ -897,10 +899,15 @@ for ml in $MULTILIBS; do
   echo '	chmod 644'  ${ldir}/libgcov.a
   echo '	$(RANLIB_FOR_TARGET)' ${ldir}/libgcov.a
 
-  if [ "$SHLIB_LINK" ]; then
+  # @LOCALMOD
+  # move installation of libgcc_eh out of the SHLIB_LINK condition
+  # if [ "$SHLIB_LINK" ]; then
     echo '	$(INSTALL_DATA)' ${dir}/libgcc_eh.a ${ldir}/
     echo '	chmod 644'  ${ldir}/libgcc_eh.a
     echo '	$(RANLIB_FOR_TARGET)' ${ldir}/libgcc_eh.a
+
+  # @LOCALMOD
+  if [ "$SHLIB_LINK" ]; then
 
     shlib_slibdir_qual=
     os_multilib_dir=`$GCC_FOR_TARGET $flags --print-multi-os-directory`
