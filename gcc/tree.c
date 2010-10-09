@@ -6744,9 +6744,7 @@ build_common_tree_nodes_2 (int short_double)
   {
     /* @LOCALMOD-BEGIN */
     tree t;
-    if (flag_expand_va_arg)
-        t = targetm.build_builtin_va_list ();
-    else
+    if (flag_use_llvm_va_arg)
       {
         /* If not expanding va_arg, make va_list large enough
            so that the generated bitcode will work on all platforms.
@@ -6756,6 +6754,8 @@ build_common_tree_nodes_2 (int short_double)
                 char_type_node,
                 build_index_type (build_int_cst (NULL_TREE, 24-1)));
       }
+    else
+        t = targetm.build_builtin_va_list ();
     /* @LOCALMOD-END */
 
     /* Many back-ends define record types without setting TYPE_NAME.
