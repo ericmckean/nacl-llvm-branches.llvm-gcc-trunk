@@ -4359,32 +4359,24 @@ std_gimplify_va_arg_expr (tree valist, tree type, tree *pre_p, tree *post_p)
   return build_va_arg_indirect_ref (addr);
 }
 
-/* The PNaCL implementation of va_arg: turn __builtin_va_arg, aka
-   VA_ARG_EXPR, into a call to a fake intrinsic called "va_arg", which
-   will later get converted into an LLVM intrinsic. */
+/* Use the LLVM implementation of va_arg: turn __builtin_va_arg, aka
+   VA_ARG_EXPR, into a call to BUILT_IN_VA_ARG, which will later get
+   lowered into the LLVM va_arg instruction. */
 tree
-pnacl_gimplify_va_arg_expr (tree valist, tree type, tree *pre_p, tree *post_p)
+llvm_gimplify_va_arg_expr (tree valist, tree type, tree *pre_p, tree *post_p)
 {
   tree expr;
-
-  if (flag_expand_va_arg)
-    return targetm.gimplify_va_arg_expr (valist, type, pre_p, post_p);
-
-  /* -fnoexpand_va_arg was specified.  Don't expand the VA_ARG
-     operator, but turn it back into a call to an external
-     function. */
- 
-  /* Take the address: despite the syntax, the va_list is really being
-     passed by reference with the intent of modification.
-  */
 
   /* if the tree code is an ARRAY_TYPE, gimplify_va_arg_expr has already
      taken the address before calling us. */
   if (TREE_CODE (va_list_type_node) != ARRAY_TYPE)
+    /* Take the address: despite the syntax, the va_list is really being
+       passed by reference with the intent of modification. */
     valist = build1 (ADDR_EXPR,
 		     build_pointer_type (TREE_TYPE (valist)),
 		     valist);
-  valist = tree_cons (NULL_TREE, valist, NULL);
+
+  valist = tree_cons (NULL_TREE, valist, NULL_TREE);
   expr = build_function_call_expr (
       implicit_built_in_decls[BUILT_IN_VA_ARG], valist);
   TREE_TYPE(expr) = type;
@@ -4508,7 +4500,13 @@ gimplify_va_arg_expr (tree *expr_p, tree *pre_p, tree *post_p)
 	   assert this is non-null.  */
 	return GS_ALL_DONE;
 
-      *expr_p = pnacl_gimplify_va_arg_expr (valist, type, pre_p, post_p);
+      if (flag_use_llvm_va_arg)
+        /* -fuse-llvm-va-arg was specified. Don't expand the VA_ARG
+           operator, but turn it into an LLVM VAArgInst */
+        *expr_p = llvm_gimplify_va_arg_expr (valist, type, pre_p, post_p);
+      else
+        *expr_p = targetm.gimplify_va_arg_expr (valist, type, pre_p, post_p);
+
       return GS_OK;
     }
 }

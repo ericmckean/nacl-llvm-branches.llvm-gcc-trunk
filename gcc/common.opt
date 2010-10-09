@@ -225,11 +225,6 @@ emit-llvm-bc
 Common Report Var(emit_llvm_bc)
 Emit LLVM IR to the output file instead of native machine code.
 
-fexpand-va-arg
-Common Report Var(flag_expand_va_arg) Init(1)
-Expand the __builtin_va_arg operator to address computations.  If
-false, the opcode is replaced by a call to an intrinsic.
-
 ; Calculate log, log2, log10, exp, exp2, pow(10,x) to a limited precision for
 ; single-precision floating-point numbers.
 flimited-precision=
@@ -1256,6 +1251,10 @@ fuse-profile
 Common
 Enable common options for performing profile feedback directed optimizations
 ; APPLE LOCAL end new profiling flag
+
+fuse-llvm-va-arg
+Common Report Var(flag_use_llvm_va_arg) Init(0)
+Use the LLVM va_arg instruction instead of generating target-dependent code.
 
 fvar-tracking
 Common Report Var(flag_var_tracking) VarExists
