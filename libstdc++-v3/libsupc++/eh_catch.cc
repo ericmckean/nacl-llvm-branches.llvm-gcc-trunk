@@ -86,13 +86,7 @@ __cxxabiv1::__cxa_begin_catch (void *exc_obj_in) throw()
 
   objectp = __gxx_caught_object(exceptionObject);
 #ifdef __ARM_EABI_UNWINDER__
-#ifdef __native_client__
-      // TODO(espindola): figure out how we are going to handle exceptions on
-      // native client.
-      abort();
-#else
   _Unwind_Complete(exceptionObject);
-#endif
 #endif
   return objectp;
 }

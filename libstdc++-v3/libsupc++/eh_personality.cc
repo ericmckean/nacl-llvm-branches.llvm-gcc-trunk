@@ -679,10 +679,10 @@ PERSONALITY_FUNCTION (int version,
   /* For targets with pointers smaller than the word size, we must extend the
      pointer, and this extension is target dependent.  */
 
-  _Unwind_SetGR (context, __builtin_eh_return_data_regno (0),
-		 __builtin_extend_pointer (ue_header));
-  _Unwind_SetGR (context, __builtin_eh_return_data_regno (1),
-		 handler_switch_value);
+  /* @LOCALMOD-START */
+  _Unwind_PNaClSetResult0(context, __builtin_extend_pointer (ue_header));
+  _Unwind_PNaClSetResult1(context, handler_switch_value);
+  /* @LOCALMOD-END */
   _Unwind_SetIP (context, landing_pad);
 
 #ifdef __ARM_EABI_UNWINDER__

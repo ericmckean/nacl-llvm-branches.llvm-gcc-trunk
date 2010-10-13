@@ -231,6 +231,52 @@ _Unwind_SetGR (struct _Unwind_Context *context, int index, _Unwind_Word val)
     }
 }
 
+/* @LOCALMOD-START */
+/*
+ * new ABI functions to support a platform independent version
+ * of libstdc++
+ * NOTE: this is only inline because we follow the model of the other
+ * functions - that those are marked 'inline' seems questionable
+ *
+ */
+
+/* abstract away __builtin_eh_return_data_regno(0) 
+ * this needs to be better researched and documented 
+ * the index is likely influenced by  DWARF_FRAME_REGNUM(REG) and
+ * EH_RETURN_DATA_REGNO
+ * c.f.: expand_builtin_eh_return_data_regno()
+ */
+ 
+inline void
+_Unwind_PNaClSetResult0 (struct _Unwind_Context *context, _Unwind_Word val) {
+#if defined(__x86_64__)
+  int index = 0; /* untested */
+  abort();  
+#elif defined(__i386__)
+  int index = 0; 
+#else
+  int index = 0; /* untested */
+  abort();
+#endif
+  _Unwind_SetGR(context, index, val);
+}
+
+/* abstract away __builtin_eh_return_data_regno(1) */
+inline  void
+_Unwind_PNaClSetResult1 (struct _Unwind_Context *context, _Unwind_Word val) {
+#if defined(__x86_64__)
+  int index = 1; /* untested */
+  abort(); 
+#elif defined(__i386__)
+  int index = 2;
+#else
+  int index = 1; /* untested */
+  abort();
+#endif
+  _Unwind_SetGR(context, index, val);
+}
+/* @LOCALMOD-END */
+
 /* Get the pointer to a register INDEX as saved in CONTEXT.  */
 
 static inline void *
@@ -1540,6 +1586,10 @@ alias (_Unwind_RaiseException);
 alias (_Unwind_Resume);
 alias (_Unwind_Resume_or_Rethrow);
 alias (_Unwind_SetGR);
+/* @LOCALMOD-START */
+alias (_Unwind_PNaClSetResult0();
+alias (_Unwind_PNaClSetResult1();
+/* @LOCALMOD-END */
 alias (_Unwind_SetIP);
 #endif
 
