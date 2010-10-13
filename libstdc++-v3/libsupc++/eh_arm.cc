@@ -30,6 +30,83 @@
 #include <cxxabi.h>
 #include "unwind-cxx.h"
 
+// @LOCALMOD-START
+// temporary hack to make symbols available which really should come from
+// libgcc_eh. Sadly we currently do not build libgcc_eh anymore.
+// The originals for these stubbed out rountines are here: gcc/unwind-compat.c
+using namespace __cxxabiv1;
+
+extern "C" void abort(void);
+
+extern "C" _Unwind_Reason_Code 
+_Unwind_Resume_or_Rethrow(struct _Unwind_Exception* exc) {
+  abort();
+  return _Unwind_Reason_Code(0);
+}
+
+extern "C" _Unwind_Reason_Code
+_Unwind_RaiseException(struct _Unwind_Exception* exc)
+{
+  abort();
+  return _Unwind_Reason_Code(0);
+}
+
+extern "C"  void
+_Unwind_DeleteException (struct _Unwind_Exception* exc) {
+  abort();
+}
+
+extern "C" _Unwind_Word
+_Unwind_GetGR (struct _Unwind_Context *context, int index) {
+  abort();
+  return _Unwind_Word(0);
+}
+
+extern "C" void
+_Unwind_SetGR (struct _Unwind_Context *context, int index,
+	       _Unwind_Word val) {
+  abort();
+}
+
+extern "C" _Unwind_Ptr
+_Unwind_GetIP (struct _Unwind_Context *context)
+{
+  abort();
+  return 0;
+}
+
+extern "C" void
+_Unwind_SetIP (struct _Unwind_Context *context, _Unwind_Ptr val) {
+  abort();
+}
+
+extern "C" _Unwind_Ptr
+_Unwind_GetRegionStart (struct _Unwind_Context *context) {
+   abort();
+   return 0;
+}
+
+extern "C" _Unwind_Ptr
+_Unwind_GetDataRelBase (struct _Unwind_Context *context) {
+   abort();
+   return 0;
+}
+
+extern "C" _Unwind_Ptr
+_Unwind_GetTextRelBase (struct _Unwind_Context *context) {
+   abort();
+   return 0;
+}
+
+extern "C" void *
+_Unwind_GetLanguageSpecificData (struct _Unwind_Context *context) {
+   abort();
+   return 0;
+}
+// @LOCALMOD-END
+
+
+
 #ifdef __ARM_EABI_UNWINDER__
 
 using namespace __cxxabiv1;
@@ -166,5 +243,4 @@ asm (".global __cxa_end_cleanup\n"
 "	ldmfd\tsp!, {r1, r2, r3, r4}\n"
 "	bl\t_Unwind_Resume @ Never returns\n");
 #endif
-
 #endif

@@ -405,6 +405,7 @@ PERSONALITY_FUNCTION (int version,
   // virtual IP register point at the UCB.
   ip = (_Unwind_Ptr) ue_header;
   _Unwind_SetGR(context, 12, ip);
+
 #else
   __cxa_exception* xh = __get_exception_header_from_ue(ue_header);
 
@@ -677,11 +678,13 @@ PERSONALITY_FUNCTION (int version,
 
   /* For targets with pointers smaller than the word size, we must extend the
      pointer, and this extension is target dependent.  */
+
   _Unwind_SetGR (context, __builtin_eh_return_data_regno (0),
 		 __builtin_extend_pointer (ue_header));
   _Unwind_SetGR (context, __builtin_eh_return_data_regno (1),
 		 handler_switch_value);
   _Unwind_SetIP (context, landing_pad);
+
 #ifdef __ARM_EABI_UNWINDER__
   if (found_type == found_cleanup)
     __cxa_begin_cleanup(ue_header);

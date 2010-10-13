@@ -28,6 +28,12 @@
    Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
    02110-1301, USA.  */
 
+/* @LOCALMOD */
+/* Only build this for x86-32 for now - until we have sorted out
+   compilation issues x86_64, for ARM we probably have to completely
+   revise this */
+#ifdef __i386__
+
 #include "tconfig.h"
 #include "tsystem.h"
 #include "coretypes.h"
@@ -1538,3 +1544,6 @@ alias (_Unwind_SetIP);
 #endif
 
 #endif /* !USING_SJLJ_EXCEPTIONS */
+
+/* @LOCALMOD */
+#endif  /* __i386__*/

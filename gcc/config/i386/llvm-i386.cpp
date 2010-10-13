@@ -1746,7 +1746,8 @@ llvm_x86_64_get_multiple_return_reg_classes(tree TreeType, const Type *Ty,
     case X86_64_X87_CLASS:
     case X86_64_X87UP_CLASS:
     case X86_64_COMPLEX_X87_CLASS:
-      Elts.push_back(Type::getX86_FP80Ty(Context));
+      // @LOCALMOD
+      Elts.push_back(Type::getDoubleTy(Context));
       break;
     case X86_64_NO_CLASS:
       // padding bytes.
@@ -1769,8 +1770,9 @@ const Type *llvm_x86_aggr_type_for_struct_return(tree type) {
 
   // Special handling for _Complex.
   if (llvm_x86_should_not_return_complex_in_memory(type)) {
-    ElementTypes.push_back(Type::getX86_FP80Ty(Context));
-    ElementTypes.push_back(Type::getX86_FP80Ty(Context));
+    // @LOCALMOD
+    ElementTypes.push_back(Type::getDoubleTy(Context));
+    ElementTypes.push_back(Type::getDoubleTy(Context));
     return StructType::get(Context, ElementTypes, STy->isPacked());
   } 
 
