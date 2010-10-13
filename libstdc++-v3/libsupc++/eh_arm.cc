@@ -31,9 +31,10 @@
 #include "unwind-cxx.h"
 
 // @LOCALMOD-START
+// NOTE: this file is compiled even for non-ARM builds so the dummies
+//       generated here are  used by all architectures.
 // temporary hack to make symbols available which really should come from
-// libgcc_eh. Sadly we currently do not build libgcc_eh anymore.
-// The originals for these stubbed out rountines are here: gcc/unwind-compat.c
+// libgcc_eh which theses symbols currently preempt.
 using namespace __cxxabiv1;
 
 extern "C" void abort(void);
@@ -101,7 +102,18 @@ _Unwind_GetTextRelBase (struct _Unwind_Context *context) {
 extern "C" void *
 _Unwind_GetLanguageSpecificData (struct _Unwind_Context *context) {
    abort();
-   return 0;
+   return 0;  
+}
+
+// New pnacl abi dummies
+extern "C" void
+_Unwind_PNaClSetResult0 (struct _Unwind_Context *context, _Unwind_Word val) {
+  abort();
+}
+
+extern "C" void
+_Unwind_PNaClSetResult1 (struct _Unwind_Context *context, _Unwind_Word val) {
+  abort();
 }
 // @LOCALMOD-END
 
