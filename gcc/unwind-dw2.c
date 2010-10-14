@@ -29,10 +29,11 @@
    02110-1301, USA.  */
 
 /* @LOCALMOD */
-/* Only build this for x86-32 for now - until we have sorted out
-   compilation issues x86_64, for ARM we probably have to completely
-   revise this */
-#ifdef __i386__
+/*
+ * NOTE: Only build this for x86-32 and x86_64,
+ * we have to completely revise this for ARM
+ */
+#if defined(__i386__) || defined (__x86_64__)
 
 #include "tconfig.h"
 #include "tsystem.h"
@@ -1587,13 +1588,100 @@ alias (_Unwind_Resume);
 alias (_Unwind_Resume_or_Rethrow);
 alias (_Unwind_SetGR);
 /* @LOCALMOD-START */
-alias (_Unwind_PNaClSetResult0();
-alias (_Unwind_PNaClSetResult1();
+alias (_Unwind_PNaClSetResult0);
+alias (_Unwind_PNaClSetResult1);
 /* @LOCALMOD-END */
 alias (_Unwind_SetIP);
 #endif
 
 #endif /* !USING_SJLJ_EXCEPTIONS */
 
-/* @LOCALMOD */
-#endif  /* __i386__*/
+/* @LOCALMOD-START */
+#elif defined(__arm__)
+/* NOTE: for arm we only provide dummies for now */
+struct _Unwind_Exception;
+struct _Unwind_Context;
+typedef int _Unwind_Reason_Code;
+typedef int _Unwind_Word;
+typedef int _Unwind_Ptr;
+extern void abort(void);
+
+_Unwind_Reason_Code 
+_Unwind_Resume_or_Rethrow(struct _Unwind_Exception* exc) {
+  abort();
+  return 0;
+}
+
+_Unwind_Reason_Code
+_Unwind_RaiseException(struct _Unwind_Exception* exc)
+{
+  abort();
+  return 0;
+}
+
+ void
+_Unwind_DeleteException (struct _Unwind_Exception* exc) {
+  abort();
+}
+
+_Unwind_Word
+_Unwind_GetGR (struct _Unwind_Context *context, int index) {
+  abort();
+  return 0;
+}
+
+void
+_Unwind_SetGR (struct _Unwind_Context *context, int index,
+               _Unwind_Word val) {
+  abort();
+}
+
+_Unwind_Ptr
+_Unwind_GetIP (struct _Unwind_Context *context)
+{
+  abort();
+  return 0;
+}
+
+void
+_Unwind_SetIP (struct _Unwind_Context *context, _Unwind_Ptr val) {
+  abort();
+}
+
+_Unwind_Ptr
+_Unwind_GetRegionStart (struct _Unwind_Context *context) {
+   abort();
+   return 0;
+}
+
+_Unwind_Ptr
+_Unwind_GetDataRelBase (struct _Unwind_Context *context) {
+   abort();
+   return 0;
+}
+
+_Unwind_Ptr
+_Unwind_GetTextRelBase (struct _Unwind_Context *context) {
+   abort();
+   return 0;
+}
+
+void *
+_Unwind_GetLanguageSpecificData (struct _Unwind_Context *context) {
+   abort();
+   return 0;
+}
+
+void
+_Unwind_PNaClSetResult0 (struct _Unwind_Context *context, _Unwind_Word val) {
+  abort();
+}
+
+void
+_Unwind_PNaClSetResult1 (struct _Unwind_Context *context, _Unwind_Word val) {
+  abort();
+}
+#else
+#error "unknown arch"
+#endif 
+/* @LOCALMOD-END */
