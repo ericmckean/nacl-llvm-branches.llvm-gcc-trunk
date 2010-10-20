@@ -258,6 +258,15 @@ base_from_object (unsigned char encoding, struct object *ob)
     }
 }
 
+/* @LOCALMOD-START */
+/* avoid deps on libc */
+static int mystrlen(const char* cp) {
+  int count = 0;
+  while (*cp++) ++count;
+  return count;
+}
+/* @LOCALMOD-END */
+
 /* Return the FDE pointer encoding from the CIE.  */
 /* ??? This is a subset of extract_cie_info from unwind-dw2.c.  */
 
@@ -273,7 +282,8 @@ get_cie_encoding (const struct dwarf_cie *cie)
   if (aug[0] != 'z')
     return DW_EH_PE_absptr;
 
-  p = aug + strlen ((const char *)aug) + 1; /* Skip the augmentation string.  */
+  // @LOCALMOD
+  p = aug + mystrlen ((const char *)aug) + 1; /* Skip the augmentation string.  */
   p = read_uleb128 (p, &utmp);		/* Skip code alignment.  */
   p = read_sleb128 (p, &stmp);		/* Skip data alignment.  */
   if (cie->version == 1)		/* Skip return address column.  */
