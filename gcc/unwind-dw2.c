@@ -67,6 +67,23 @@
 #define DWARF_REG_TO_UNWIND_COLUMN(REGNO) (REGNO)
 #endif
 
+/* @LOCALMOD-START */
+/* avoid deps on libc - note: regions are extremely small and do not overlap */
+static void mybzero(char* cp, int len) {
+  for(;len > 0; --len) *cp++ = 0;
+}
+
+static int mystrlen(const char* cp) {
+  int count = 0;
+  while (*cp++) ++count;
+  return count;
+}
+
+static void mymemcpy(char* dst, const char* src, int len) {
+  for(;len > 0; --len) *dst++ = *src++;
+}
+/* @LOCALMOD-END */
+
 /* This is the register and unwind state for a particular frame.  This
    provides the information necessary to unwind up past a frame and return
    to its caller.  */
@@ -400,7 +417,7 @@ extract_cie_info (const struct dwarf_cie *cie, struct _Unwind_Context *context,
 		  _Unwind_FrameState *fs)
 {
   const unsigned char *aug = cie->augmentation;
-  const unsigned char *p = aug + strlen ((const char *)aug) + 1;
+  const unsigned char *p = aug + mystrlen ((const char *)aug) + 1;
   const unsigned char *ret = NULL;
   _Unwind_Word utmp;
 
@@ -1149,7 +1166,7 @@ uw_frame_state_for (struct _Unwind_Context *context, _Unwind_FrameState *fs)
   const struct dwarf_cie *cie;
   const unsigned char *aug, *insn, *end;
 
-  memset (fs, 0, sizeof (*fs));
+  mybzero (fs, sizeof (*fs));   /* @LOCALMOD */
   context->args_size = 0;
   context->lsda = 0;
 
@@ -1234,7 +1251,7 @@ __frame_state_for (void *pc_target, struct frame_state *state_in)
   _Unwind_FrameState fs;
   int reg;
 
-  memset (&context, 0, sizeof (struct _Unwind_Context));
+  mybzero (&context, sizeof (struct _Unwind_Context));   /* @LOCALMOD */
   context.flags = EXTENDED_CONTEXT_BIT;
   context.ra = pc_target + 1;
 
@@ -1458,7 +1475,7 @@ uw_init_context_1 (struct _Unwind_Context *context,
   _Unwind_SpTmp sp_slot;
   _Unwind_Reason_Code code;
 
-  memset (context, 0, sizeof (struct _Unwind_Context));
+  mybzero (context, sizeof (struct _Unwind_Context));  /* @LOCALMOD */
   context->ra = ra;
   context->flags = EXTENDED_CONTEXT_BIT;
 
@@ -1530,17 +1547,19 @@ uw_install_context_1 (struct _Unwind_Context *current,
 	  if (dwarf_reg_size_table[i] == sizeof (_Unwind_Word))
 	    {
 	      w = (_Unwind_Internal_Ptr) t;
-	      memcpy (c, &w, sizeof (_Unwind_Word));
+	      mymemcpy (c, &w, sizeof (_Unwind_Word)); /* @LOCALMOD */
+
 	    }
 	  else
 	    {
 	      gcc_assert (dwarf_reg_size_table[i] == sizeof (_Unwind_Ptr));
 	      p = (_Unwind_Internal_Ptr) t;
-	      memcpy (c, &p, sizeof (_Unwind_Ptr));
+	      mymemcpy (c, &p, sizeof (_Unwind_Ptr)); /* @LOCALMOD */
+
 	    }
 	}
       else if (t && c && t != c)
-	memcpy (c, t, dwarf_reg_size_table[i]);
+	mymemcpy (c, t, dwarf_reg_size_table[i]); /* @LOCALMOD */
     }
 
   /* If the current frame doesn't have a saved stack pointer, then we
