@@ -6581,8 +6581,22 @@ bool TreeToLLVM::EmitBuiltinDwarfCFA(tree exp, Value *&Result) {
   if (!validate_arglist(TREE_OPERAND(exp, 1), VOID_TYPE))
     return false;
 
+  /*
+   * @LOCALMOD-START
+   * A really gross hack - this is never used for ARM and causes
+   * an ICE/segfault (likely because ARG_POINTER_CFA_OFFSET is 4 on arm).
+   * But we want to use this frontend for EmitBuiltinDwarfCFA() debugging
+   * on x86.
+   * ARG_POINTER_CFA_OFFSET(exp) is always zero for x86, c.f.
+   * llvm-gcc-4.2/gcc/config/i386/i386.h
+   */
+#if 1
+  int cfa_offset = 0;
+#else
   int cfa_offset = ARG_POINTER_CFA_OFFSET(exp);
-
+#endif
+  /* @LOCALMOD-END */
+     
   // FIXME: is i32 always enough here?
   Result = Builder.CreateCall(Intrinsic::getDeclaration(TheModule,
                                                         Intrinsic::eh_dwarf_cfa),
