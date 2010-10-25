@@ -1691,6 +1691,18 @@ _Unwind_GetLanguageSpecificData (struct _Unwind_Context *context) {
    return 0;
 }
 
+_Unwind_Word
+_Unwind_GetCFA (struct _Unwind_Context *context) {
+   abort();
+   return 0;
+}
+
+_Unwind_Reason_Code
+_Unwind_Backtrace(void *trace, void *trace_argument) {
+   abort();
+   return 0;
+}
+
 void
 _Unwind_PNaClSetResult0 (struct _Unwind_Context *context, _Unwind_Word val) {
   abort();
