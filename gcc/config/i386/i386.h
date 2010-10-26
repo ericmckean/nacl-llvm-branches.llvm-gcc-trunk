@@ -621,7 +621,8 @@ extern const char *host_detect_local_cpu (int argc, const char **argv);
 
 /* target machine storage layout */
 
-#define LONG_DOUBLE_TYPE_SIZE 80
+// @LOCALMOD
+#define LONG_DOUBLE_TYPE_SIZE 64
 
 /* Set the value of FLT_EVAL_METHOD in float.h.  When using only the
    FPU, assume that the fpcw is set to extended precision; when using

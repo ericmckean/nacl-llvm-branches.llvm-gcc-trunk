@@ -5450,6 +5450,7 @@ bool TreeToLLVM::EmitBuiltinCall(tree exp, tree fndecl,
   // Varargs builtins.
   case BUILT_IN_VA_START:
   case BUILT_IN_STDARG_START:   return EmitBuiltinVAStart(exp);
+  case BUILT_IN_VA_ARG:         return EmitBuiltinVAArg(exp, Result);
   case BUILT_IN_VA_END:         return EmitBuiltinVAEnd(exp);
   case BUILT_IN_VA_COPY:        return EmitBuiltinVACopy(exp);
   case BUILT_IN_CONSTANT_P:     return EmitBuiltinConstantP(exp, Result);
@@ -6577,8 +6578,22 @@ bool TreeToLLVM::EmitBuiltinDwarfCFA(tree exp, Value *&Result) {
   if (!validate_arglist(TREE_OPERAND(exp, 1), VOID_TYPE))
     return false;
 
+  /*
+   * @LOCALMOD-START
+   * A really gross hack - this is never used for ARM and causes
+   * an ICE/segfault (likely because ARG_POINTER_CFA_OFFSET is 4 on arm).
+   * But we want to use this frontend for EmitBuiltinDwarfCFA() debugging
+   * on x86.
+   * ARG_POINTER_CFA_OFFSET(exp) is always zero for x86, c.f.
+   * llvm-gcc-4.2/gcc/config/i386/i386.h
+   */
+#if 1
+  int cfa_offset = 0;
+#else
   int cfa_offset = ARG_POINTER_CFA_OFFSET(exp);
-
+#endif
+  /* @LOCALMOD-END */
+     
   // FIXME: is i32 always enough here?
   Result = Builder.CreateCall(Intrinsic::getDeclaration(TheModule,
                                                         Intrinsic::eh_dwarf_cfa),
@@ -6799,6 +6814,14 @@ bool TreeToLLVM::EmitBuiltinVAEnd(tree exp) {
   Arg = BitCastToType(Arg, Type::getInt8PtrTy(Context));
   Builder.CreateCall(Intrinsic::getDeclaration(TheModule, Intrinsic::vaend),
                      Arg);
+  return true;
+}
+
+bool TreeToLLVM::EmitBuiltinVAArg(tree exp, Value *&Result) {
+  // Emit an llvm.va_arg opcode for the call to __builtin_va_arg.
+  Result = Builder.CreateVAArg(
+      Emit(TREE_VALUE(TREE_OPERAND(exp, 1)), 0),
+      ConvertType(TREE_TYPE(exp))); // (the type info was faked earlier)
   return true;
 }
 

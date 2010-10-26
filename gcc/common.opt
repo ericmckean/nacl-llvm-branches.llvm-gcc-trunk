@@ -1252,6 +1252,10 @@ Common
 Enable common options for performing profile feedback directed optimizations
 ; APPLE LOCAL end new profiling flag
 
+fuse-llvm-va-arg
+Common Report Var(flag_use_llvm_va_arg) Init(0)
+Use the LLVM va_arg instruction instead of generating target-dependent code.
+
 fvar-tracking
 Common Report Var(flag_var_tracking) VarExists
 Perform variable tracking

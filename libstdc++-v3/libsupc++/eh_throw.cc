@@ -52,6 +52,7 @@ __gxx_exception_cleanup (_Unwind_Reason_Code code, _Unwind_Exception *exc)
   __cxa_free_exception (header + 1);
 }
 
+extern "C" void abort(void);
 
 extern "C" void
 __cxxabiv1::__cxa_throw (void *obj, std::type_info *tinfo, 

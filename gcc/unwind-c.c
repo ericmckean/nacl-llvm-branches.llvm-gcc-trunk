@@ -32,6 +32,14 @@ Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
 #include "tconfig.h"
 #include "tsystem.h"
 #include "unwind.h"
+
+# define NACL_HALT         bkpt 0x6666
+/* On NaCl we want to avoid libgcc -> libc dependencies, and signals are
+   not implemented. */
+#ifdef __native_client__
+#define abort() asm ("##NACL_HALT")
+#endif
+
 #define NO_SIZE_OF_ENCODED_VALUE
 #include "unwind-pe.h"
 

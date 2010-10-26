@@ -30,6 +30,7 @@
 #include <cxxabi.h>
 #include "unwind-cxx.h"
 
+
 #ifdef __ARM_EABI_UNWINDER__
 
 using namespace __cxxabiv1;
@@ -166,5 +167,4 @@ asm (".global __cxa_end_cleanup\n"
 "	ldmfd\tsp!, {r1, r2, r3, r4}\n"
 "	bl\t_Unwind_Resume @ Never returns\n");
 #endif
-
 #endif
