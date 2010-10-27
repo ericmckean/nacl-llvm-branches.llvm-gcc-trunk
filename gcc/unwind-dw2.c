@@ -268,8 +268,7 @@ _Unwind_SetGR (struct _Unwind_Context *context, int index, _Unwind_Word val)
 inline void
 _Unwind_PNaClSetResult0 (struct _Unwind_Context *context, _Unwind_Word val) {
 #if defined(__x86_64__)
-  int index = 0; /* untested */
-  abort();  
+  int index = 0;
 #elif defined(__i386__)
   int index = 0; 
 #else
@@ -283,8 +282,7 @@ _Unwind_PNaClSetResult0 (struct _Unwind_Context *context, _Unwind_Word val) {
 inline  void
 _Unwind_PNaClSetResult1 (struct _Unwind_Context *context, _Unwind_Word val) {
 #if defined(__x86_64__)
-  int index = 1; /* untested */
-  abort(); 
+  int index = 1;
 #elif defined(__i386__)
   int index = 2;
 #else
