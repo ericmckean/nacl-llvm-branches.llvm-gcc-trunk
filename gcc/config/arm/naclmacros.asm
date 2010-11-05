@@ -41,7 +41,7 @@
 
 
 	.macro sfi_code_mask reg cond=
-	bic\cond \reg, \reg, #0xf000000f
+	bic\cond \reg, \reg, #0xc000000f
 	.endm
 
 
