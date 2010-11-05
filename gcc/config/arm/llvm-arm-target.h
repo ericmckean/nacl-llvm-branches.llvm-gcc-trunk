@@ -102,6 +102,27 @@ bool llvm_arm_should_pass_or_return_aggregate_in_regs(tree TreeType,
 #define LLVM_SHOULD_RETURN_VECTOR_AS_SHADOW(X, isBuiltin) \
   (TREE_INT_CST_LOW(TYPE_SIZE(X)) > 128)
 
+
+/* @LOCALMOD-START */
+/* do not do anything special for arm use defaults from: gcc/llvm-abi.h */
+#undef LLVM_SHOULD_PASS_AGGREGATE_IN_MIXED_REGS
+#undef LLVM_TRY_PASS_AGGREGATE_CUSTOM
+#undef LLVM_AGGREGATE_PARTIALLY_PASSED_IN_REGS
+#undef LLVM_AGGR_TYPE_FOR_STRUCT_RETURN
+#undef LLVM_EXTRACT_MULTIPLE_RETURN_VALUE
+#undef LLVM_SHOULD_NOT_USE_SHADOW_RETURN
+#undef LLVM_SHOULD_RETURN_VECTOR_AS_SHADOW
+/* overwrite these defaults to not pass aggregates in regs */
+#define LLVM_SHOULD_PASS_AGGREGATE_AS_FCA(X, TY) true
+#define LLVM_SHOULD_PASS_AGGREGATE_IN_INTEGER_REGS(X, Y, Z) false
+/* force default calling convention */
+#undef TARGET_ADJUST_LLVM_CC
+#define TARGET_ADJUST_LLVM_CC(CC, type)           \
+  {                                               \
+        CC = CallingConv::C;                      \
+  }
+
+/* @LOCALMOD-END */
 #endif /* LLVM_ABI_H */
 #endif /* ENABLE_LLVM */
 /* LLVM LOCAL end (ENTIRE FILE!)  */
