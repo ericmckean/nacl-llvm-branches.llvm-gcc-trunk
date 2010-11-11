@@ -6751,8 +6751,8 @@ build_common_tree_nodes_2 (int short_double)
            (e.g., X86-64 needs exactly 24-bytes for va_list) */
 
         t = build_array_type (
-                char_type_node,
-                build_index_type (build_int_cst (NULL_TREE, 24-1)));
+                long_long_unsigned_type_node,
+                build_index_type (build_int_cst (NULL_TREE, 3-1)));
       }
     else
         t = targetm.build_builtin_va_list ();
