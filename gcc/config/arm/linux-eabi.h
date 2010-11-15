@@ -33,8 +33,10 @@
 
 /* We default to a soft-float ABI so that binaries can run on all
    target hardware.  */
-#undef TARGET_DEFAULT_FLOAT_ABI
-#define TARGET_DEFAULT_FLOAT_ABI ARM_FLOAT_ABI_SOFT
+// @LOCALMOD
+// #undef TARGET_DEFAULT_FLOAT_ABI
+// #define TARGET_DEFAULT_FLOAT_ABI ARM_FLOAT_ABI_SOFT
+#define TARGET_DEFAULT_FLOAT_ABI ARM_FLOAT_ABI_HARD
 
 /* We default to the "aapcs-linux" ABI so that enums are int-sized by
    default.  */
