@@ -2681,6 +2681,14 @@ esac
 # $build_configdirs and $target_configdirs.
 # If we have the source for $noconfigdirs entries, add them to $notsupp.
 
+# @LOCALMOD-START disable a bunch of libs we do not want for pnacl
+# we either do not need them or we build them as bitcode in a separate step
+#
+# There seems to be no good way to avoid building them in a less invasive
+# fashion, e.g. configure args or makefile targets
+noconfigdirs="$noconfigdirs target-libiberty target-libstdc++-v3"
+# @LOCALMOD-STOP
+
 notsupp=""
 for dir in . $skipdirs $noconfigdirs ; do
   dirname=`echo $dir | sed -e s/target-//g -e s/build-//g`
