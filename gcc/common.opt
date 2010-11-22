@@ -117,6 +117,16 @@ Wpadded
 Common Var(warn_padded)
 Warn when padding is required to align structure members
 
+; LOCALMOD-BEGIN
+Wportable-llvm
+Common Var(warn_portable_llvm)
+Warn if non-portable asm will be emitted into LLVM bitcode
+
+Werror-portable-llvm
+Common Var(error_portable_llvm)
+Treat non-portable asm that will be emitted into LLVM bitcode as errors
+; LOCALMOD-END
+
 Wshadow
 Common Var(warn_shadow)
 Warn when one local variable shadows another
