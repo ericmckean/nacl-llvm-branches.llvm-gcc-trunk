@@ -116,6 +116,14 @@ void llvm_call_llvm_shutdown(void);
  * to the more concrete type new_type.
  */
 void refine_type_to (union tree_node*, union tree_node*);
+
+/* @LOCALMOD-BEGIN */
+/* Note that we are about to emit non-portable bits into llvm bitcode.
+ * This may generate a warning, an error, or nothing, depending on flags.
+ */
+void note_nonportable_llvm(const char *mesg);
+/* @LOCALMOD-END */
+
 #endif /* ENABLE_LLVM */
 
 #endif

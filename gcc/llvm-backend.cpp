@@ -1877,6 +1877,14 @@ void llvm_emit_typedef(tree decl) {
 /// llvm_emit_file_scope_asm - Emit the specified string as a file-scope inline
 /// asm block.
 void llvm_emit_file_scope_asm(const char *string) {
+  // @LOCALMOD-BEGIN
+  // TODO: we may need to check that this is actually ASM and not some
+  // metadata that is masquerading as asm.
+  // There has been discussion about file-scope asm being used as a
+  // mechanism for emitting other strings such as ARM build attributes.
+  // Not sure if there is a portable use case for this.
+  note_nonportable_llvm("About to emit module-level assembly into bitcode!\n");
+  // @LOCALMOD-END
   if (TheModule->getModuleInlineAsm().empty())
     TheModule->setModuleInlineAsm(string);
   else
@@ -1908,6 +1916,19 @@ void print_llvm_type(FILE *file, void *LLVM) {
   raw_os_ostream RO(FS);
   WriteTypeSymbolic(RO, (const Type*)LLVM, TheModule);
 }
+
+// @LOCALMOD-BEGIN
+/// note_nonportable_llvm - Note that we are about to emit non-portable
+/// bits into llvm bitcode. This may generate a warning, an error, or nothing,
+/// depending on flags.
+void note_nonportable_llvm(const char *mesg) {
+  if (warn_portable_llvm) {
+    warning(OPT_Wportable_llvm, mesg);
+  } else if (error_portable_llvm) {
+    error("%s", mesg);
+  }
+}
+// @LOCALMOD-END
 
 /// extractRegisterName - Get a register name given its decl. In 4.2 unlike 4.0
 /// these names have been run through set_user_assembler_name which means they

@@ -4347,6 +4347,10 @@ Value *TreeToLLVM::EmitReadOfRegisterVariable(tree decl,
     return 0;   // Just don't copy something into DestLoc.
   }
 
+  // @LOCALMOD-BEGIN
+  note_nonportable_llvm("About to emit asm reg-copy into bitcode!\n");
+  // @LOCALMOD-END
+
   // Turn this into a 'tmp = call Ty asm "", "={reg}"()'.
   FunctionType *FTy = FunctionType::get(Ty, std::vector<const Type*>(),false);
 
@@ -4372,6 +4376,10 @@ Value *TreeToLLVM::EmitMoveOfRegVariableToRightReg(Instruction *I, tree var) {
       return UndefValue::get(Ty);
     return 0;   // Just don't copy something into DestLoc.
   }
+
+  // @LOCALMOD-BEGIN
+  note_nonportable_llvm("About to emit asm reg-copy into bitcode!\n");
+  // @LOCALMOD-END
 
   std::vector<const Type*> ArgTys;
   ArgTys.push_back(Ty);
@@ -4401,6 +4409,10 @@ void TreeToLLVM::EmitModifyOfRegisterVariable(tree decl, Value *RHS) {
   // If there was an error, bail out.
   if (ValidateRegisterVariable(decl))
     return;
+
+  // @LOCALMOD-BEGIN
+  note_nonportable_llvm("About to emit asm reg-copy into bitcode!\n");
+  // @LOCALMOD-END
 
   // Turn this into a 'call void asm sideeffect "", "{reg}"(Ty %RHS)'.
   std::vector<const Type*> ArgTys;
@@ -4786,6 +4798,14 @@ static void FreeConstTupleStrings(const char **ReplacementStrings,
 }
 
 Value *TreeToLLVM::EmitASM_EXPR(tree exp) {
+
+  // @LOCALMOD-BEGIN
+  // TODO: refine check if asm is portable (e.g., with some mechanism we
+  // add in the future), and don't warn in that case!
+  // This already skips warnings for asm that maps to portable llvm intrinsics.
+  note_nonportable_llvm("About to emit asm into bitcode!\n");
+  // @LOCALMOD-END
+
   unsigned NumInputs = list_length(ASM_INPUTS(exp));
   unsigned NumOutputs = list_length(ASM_OUTPUTS(exp));
   unsigned NumInOut = 0;
