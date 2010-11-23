@@ -697,6 +697,18 @@ extern int arm_structure_size_boundary;
 #endif
 
 
+
+/* @LOCALMOD-START */
+/*
+ * This macro specifies the maximum number of hard registers that
+ * can be saved in a call frame
+ * NOTE: this needs some more investigation but enables us to build libgcc_eh
+ * for ARM
+ *
+ */
+#define DWARF_FRAME_REGISTERS 16
+/* @LOCALMOD-END */
+
 /* Standard register usage.  */
 
 /* Register allocation in ARM Procedure Call Standard (as used on RISCiX):

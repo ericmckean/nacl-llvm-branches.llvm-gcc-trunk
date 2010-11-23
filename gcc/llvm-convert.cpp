@@ -6717,6 +6717,11 @@ bool TreeToLLVM::EmitBuiltinEHReturn(tree exp, Value *&Result) {
 }
 
 bool TreeToLLVM::EmitBuiltinInitDwarfRegSizes(tree exp, Value *&/*Result*/) {
+  /*
+   * @LOCALMOD - carefully revisit this for ARM
+   * Note, this built-in is only used by  llvm-gcc-4.2/gcc/unwind-dw2.c
+   *  __builtin_init_dwarf_reg_size_table
+   */
 #ifdef DWARF2_UNWIND_INFO
   unsigned int i;
   bool wrote_return_column = false;

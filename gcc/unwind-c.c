@@ -90,6 +90,8 @@ parse_lsda_header (struct _Unwind_Context *context, const unsigned char *p,
 }
 
 #ifdef __ARM_EABI_UNWINDER__
+#error "PNACL does not want __ARM_EABI_UNWINDER__ to be defined"
+
 /* ARM EABI personality routines must also unwind the stack.  */
 #define CONTINUE_UNWINDING \
   do								\
