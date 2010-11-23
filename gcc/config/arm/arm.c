@@ -23375,6 +23375,16 @@ arm_dbx_register_number (unsigned int regno)
   if (IS_IWMMXT_REGNUM (regno))
     return 112 + regno - FIRST_IWMMXT_REGNUM;
 
+  /* @LOCALMOD-START */
+  /* this is a horrible hack and we only ever get here when processing the
+   * built-in __builtin_init_dwarf_reg_size_table within libgcc_eh 
+   * which is processed by c.f. TreeToLLVM::EmitBuiltinInitDwarfRegSizes()
+   * 
+   * using PSEUDO_REGISTER - 1 is safe as we only care about the first 16 regs
+   * anyway 
+   */
+  return FIRST_PSEUDO_REGISTER - 1;
+  /* @LOCALMOD-END */
   gcc_unreachable ();
 }
 
