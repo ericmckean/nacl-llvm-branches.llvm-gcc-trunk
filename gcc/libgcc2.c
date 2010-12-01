@@ -42,11 +42,18 @@ extern void panic (const char *, ...);
 #endif
 /* APPLE LOCAL end libcc_kext */
 
-#define NACL_HALT         bkpt 0x6666
 /* On NaCl we want to avoid libgcc -> libc dependencies, and signals are
    not implemented. */
+
 #ifdef __native_client__
-#define abort() asm ("##NACL_HALT")
+/* This would be slightly cleaner:
+ *  #define abort() asm("llvm.trap")
+ * but we have trouble with the inliner and bitcode at this point
+ * and llvm transforms the zero dereference into a trap internally anyway.
+ * Note, that int, char, etc. are not available in this file
+ */
+
+#define abort() * (SItype*) 0 = 0
 #endif
 
 #ifdef HAVE_GAS_HIDDEN
@@ -2055,6 +2062,14 @@ __eprintf (const char *string, const char *expression,
 #endif
 
 
+/* @LOCALMOD-START
+   Since pnacl does not support self modifying code we don't want these
+   functions anyway - but if a need arises we should implement them in
+   src/untrusted/stubs/ analogous to setjmp/longjmp
+*/
+#if 0 
+/* @LOCALMOD-END */
+
 #ifdef L_clear_cache
 /* Clear part of an instruction cache.  */
 
@@ -2079,6 +2094,9 @@ void
 __enable_execute_stack (void *addr __attribute__((__unused__)))
 {}
 #endif /* ENABLE_EXECUTE_STACK */
+
+#endif /* @LOCALMOD */
+
 
 #endif /* L_enable_execute_stack */
 

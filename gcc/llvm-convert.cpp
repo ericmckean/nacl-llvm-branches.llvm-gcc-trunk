@@ -4803,6 +4803,10 @@ Value *TreeToLLVM::EmitASM_EXPR(tree exp) {
   // TODO: refine check if asm is portable (e.g., with some mechanism we
   // add in the future), and don't warn in that case!
   // This already skips warnings for asm that maps to portable llvm intrinsics.
+
+  // This output is very verbose and hard to read:
+  // debug_tree(exp);
+  // so instead we print the actual assembly code further down 
   note_nonportable_llvm("About to emit asm into bitcode!\n");
   // @LOCALMOD-END
 
@@ -5188,6 +5192,9 @@ Value *TreeToLLVM::EmitASM_EXPR(tree exp) {
     return 0;
   }
 
+  /* @LOCALMOD-START */
+  note_nonportable_llvm(NewAsmStr.c_str());
+  /* @LOCALMOD-END */
   Value *Asm = InlineAsm::get(FTy, NewAsmStr, ConstraintStr,
                               HasSideEffects, ASM_ASM_BLOCK(exp));
   CallInst *CV = Builder.CreateCall(Asm, CallOps.begin(), CallOps.end(),
@@ -5213,12 +5220,23 @@ Value *TreeToLLVM::EmitASM_EXPR(tree exp) {
     }
   }
 
+
+/* @LOCALMOD we do not want this for pnacl 
+ * TODO: investigate:
+ * It seemed dangerous to me to invoke anything that smells
+ * like backend from our supposedly architecture agnostic frontend.
+ * In the pnacl case it would only apply arm specific transformations.
+ *
+ * Hopefully, this whole issue is moot as we never have anything to
+ * convert at this point
+ */
+
   // Give the backend a chance to upgrade the inline asm to LLVM code.  This
   // handles some common cases that LLVM has intrinsics for, e.g. x86 bswap ->
   // llvm.bswap.
   if (const TargetLowering *TLI = TheTarget->getTargetLowering())
     TLI->ExpandInlineAsm(CV);
-
+  
   if (NumChoices>1)
     FreeConstTupleStrings(ReplacementStrings, NumInputs+NumOutputs);
   return 0;

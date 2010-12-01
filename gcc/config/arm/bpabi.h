@@ -66,12 +66,20 @@
 #define RENAME_LIBRARY_SET ".set"
 #endif
 
+/* @LOCALMOD-START
+ * use a non-asm mechanism for creating function aliases 
+ */
+#if 1 
+#define RENAME_LIBRARY(GCC_NAME, AEABI_NAME) \
+  void __aeabi_  ## AEABI_NAME () __attribute__ ((alias ( "__" #GCC_NAME)));	
+#else
+/* @LOCALMOD-END */
 /* Make __aeabi_AEABI_NAME an alias for __GCC_NAME.  */
 #define RENAME_LIBRARY(GCC_NAME, AEABI_NAME)		\
   __asm__ (".globl\t__aeabi_" #AEABI_NAME "\n"		\
 	   RENAME_LIBRARY_SET "\t__aeabi_" #AEABI_NAME 	\
 	     ", __" #GCC_NAME "\n");
-
+#endif /* @LOCAMOD */
 /* Give some libgcc functions an additional __aeabi name.  */
 #ifdef L_muldi3
 #define DECLARE_LIBRARY_RENAMES RENAME_LIBRARY (muldi3, lmul)

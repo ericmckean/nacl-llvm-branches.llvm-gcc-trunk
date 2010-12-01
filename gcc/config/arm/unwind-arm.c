@@ -27,12 +27,7 @@
    Boston, MA 02110-1301, USA.  */
 #include "unwind.h"
 
-# define NACL_HALT         bkpt 0x6666
-/* On NaCl we want to avoid libgcc -> libc dependencies, and signals are
-   not implemented. */
-#ifdef __native_client__
-#define abort() asm ("##NACL_HALT")
-#endif
+#error "@LOCALMOD we do not use arm specific exception handling"
 
 /* Definitions for C++ runtime support routines.  We make these weak
    declarations to avoid pulling in libsupc++ unnecessarily.  */
