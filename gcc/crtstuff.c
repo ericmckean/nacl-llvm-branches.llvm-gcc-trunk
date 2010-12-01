@@ -51,6 +51,15 @@ Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
 
    This file must be compiled with gcc.  */
 
+/* @LOCALMOD-START
+   Disable all crtstuff for pnacl which has its own startup code
+   Disabling this any other way proved tricky and would involve more changes.
+   Ideally this hack would be eliminated in a special (p)nacl-target, though
+   it is not clear whether this is at all possible.
+*/
+#if 0
+/* @LOCALMOD-END */
+
 /* Target machine header files require this define. */
 #define IN_LIBGCC2
 
@@ -639,3 +648,4 @@ __do_global_ctors (void)
 #else /* ! CRT_BEGIN && ! CRT_END */
 #error "One of CRT_BEGIN or CRT_END must be defined."
 #endif
+#endif /* @LOCALMOD-END */

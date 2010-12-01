@@ -97,6 +97,15 @@ extern const UQItype __clz_tab[256];
    (E.g. WE32100, IBM360.)  */
 
 /* LLVM LOCAL begin */
+/* @LOCALMOD-START
+ * disable inline assembly for now and fall back to the generic versions
+ * the LLVM backend will likely generate inline code for these anyway
+ */
+#if !defined (NO_ASM)
+#define NO_ASM
+#endif
+/* @LOCALMOD-END */
+
 #if defined (__GNUC__) && !defined (NO_ASM) && (!defined (ENABLE_LLVM) || !defined (__llvm__))
 /* LLVM LOCAL end */
 

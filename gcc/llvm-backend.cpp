@@ -1884,6 +1884,7 @@ void llvm_emit_file_scope_asm(const char *string) {
   // mechanism for emitting other strings such as ARM build attributes.
   // Not sure if there is a portable use case for this.
   note_nonportable_llvm("About to emit module-level assembly into bitcode!\n");
+  note_nonportable_llvm(string);
   // @LOCALMOD-END
   if (TheModule->getModuleInlineAsm().empty())
     TheModule->setModuleInlineAsm(string);

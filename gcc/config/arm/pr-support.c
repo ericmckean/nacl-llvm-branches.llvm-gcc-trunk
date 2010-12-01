@@ -27,13 +27,7 @@
    Boston, MA 02110-1301, USA.  */
 #include "unwind.h"
 
-# define NACL_HALT         bkpt 0x6666
-/* On NaCl we want to avoid libgcc -> libc dependencies, and signals are
-   not implemented. */
-#ifdef __native_client__
-#define abort() asm ("##NACL_HALT")
-#endif
-
+#error "@LOCALMOD we do not use arm specific exception handling"
 typedef struct _ZSt9type_info type_info; /* This names C++ type_info type */
 
 /* Misc constants.  */

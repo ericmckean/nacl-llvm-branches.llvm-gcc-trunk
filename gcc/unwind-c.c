@@ -33,11 +33,17 @@ Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
 #include "tsystem.h"
 #include "unwind.h"
 
-# define NACL_HALT         bkpt 0x6666
+
 /* On NaCl we want to avoid libgcc -> libc dependencies, and signals are
    not implemented. */
 #ifdef __native_client__
-#define abort() asm ("##NACL_HALT")
+/* This would be slightly cleaner:
+ *  #define abort() asm("llvm.trap")
+ * but we have trouble with the inliner and bitcode at this point
+ * and llvm transforms the zero dereference into a trap internally anyway.
+ */
+
+#define abort() * (int*) 0 = 0
 #endif
 
 #define NO_SIZE_OF_ENCODED_VALUE
