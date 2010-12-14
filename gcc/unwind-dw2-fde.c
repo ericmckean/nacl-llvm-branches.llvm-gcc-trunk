@@ -588,6 +588,13 @@ end_fde_sort (struct object *ob, struct fde_accumulator *accu, size_t count)
       fde_split (ob, fde_compare, accu->linear, accu->erratic);
       gcc_assert (accu->linear->count + accu->erratic->count == count);
       frame_heapsort (ob, fde_compare, accu->erratic);
+      // @LOCALMOD-BEGIN
+      // Sorting just the erratic and then merging with the linear,
+      // can still leave it unsorted sometimes. Sort the linear as well!
+      // Triggered by:
+      // http://code.google.com/p/nativeclient/issues/detail?id=1106
+      frame_heapsort (ob, fde_compare, accu->linear);
+      // @LOCALMOD-END
       fde_merge (ob, fde_compare, accu->linear, accu->erratic);
       free (accu->erratic);
     }
