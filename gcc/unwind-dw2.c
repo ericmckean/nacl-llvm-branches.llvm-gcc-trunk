@@ -99,6 +99,34 @@ struct _Unwind_Context
   char by_value[DWARF_FRAME_REGISTERS+1];
 };
 
+/* @LOCALMOD-START */
+#if 0
+void DUMP_CONTEXT(struct _Unwind_Context* c) {
+  int i;
+  printf("--------  _Unwind_Context: %p, cfa: %p,  ra: %p, lsda: %p\n",
+         c, c->cfa, c->ra, c->lsda);
+  for (i = 0; i < DWARF_FRAME_REGISTERS+1; i++) {
+    printf("reg %2d: %p (by val %d)", i, c->reg[i], c->by_value[i]);
+    if  (!c->by_value[i] && c->reg[i] != 0) { 
+      printf(" -> %p", *(void**)c->reg[i]);
+    }
+    printf("\n");
+  }
+}
+
+void DUMP_FS(_Unwind_FrameState* fs) {
+  int i;
+  printf("--------  _Unwind_FrameState: %p, pc: %p\n", fs, fs->pc);
+  printf("cfa offset:%d, reg: %d, how: %d\n", 
+	 fs->cfa_offset, fs->cfa_reg, fs->cfa_how);
+  for (i = 0; i < DWARF_FRAME_REGISTERS+1; i++) {
+    printf("reg %2d, loc:%d, how:%d\n",
+           i, fs->regs.reg[i].loc.reg, fs->regs.reg[i].how);
+  }
+}
+#endif
+/* @LOCALMOD-END */
+
 /* Byte size of every register managed by these routines.  */
 static unsigned char dwarf_reg_size_table[DWARF_FRAME_REGISTERS+1];
 
@@ -180,12 +208,10 @@ _Unwind_GetGR (struct _Unwind_Context *context, int index)
   if (index == DWARF_ZERO_REG)
     return 0;
 #endif
-
   index = DWARF_REG_TO_UNWIND_COLUMN (index);
   gcc_assert (index < (int) sizeof(dwarf_reg_size_table));
   size = dwarf_reg_size_table[index];
   ptr = context->reg[index];
-
   if (_Unwind_IsExtendedContext (context) && context->by_value[index])
     return (_Unwind_Word) (_Unwind_Internal_Ptr) ptr;
 
@@ -1188,6 +1214,7 @@ uw_frame_state_for (struct _Unwind_Context *context, _Unwind_FrameState *fs)
 
   /* First decode all the insns in the CIE.  */
   end = (unsigned char *) next_fde ((struct dwarf_fde *) cie);
+
   execute_cfa_program (insn, end, context, fs);
 
   /* Locate augmentation for the fde.  */
@@ -1424,7 +1451,6 @@ static void
 uw_update_context (struct _Unwind_Context *context, _Unwind_FrameState *fs)
 {
   uw_update_context_1 (context, fs);
-
   /* Compute the return address now, since the return address column
      can change from frame to frame.  */
   context->ra = __builtin_extract_return_addr
