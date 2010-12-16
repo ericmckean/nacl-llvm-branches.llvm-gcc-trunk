@@ -110,7 +110,7 @@ void DUMP_CONTEXT(struct _Unwind_Context* c) {
     if  (!c->by_value[i] && c->reg[i] != 0) { 
       printf(" -> %p", *(void**)c->reg[i]);
     }
-    printf("\n");
+    printf(" \n");
   }
 }
 
@@ -282,33 +282,51 @@ _Unwind_SetGR (struct _Unwind_Context *context, int index, _Unwind_Word val)
  * the index is likely influenced by  DWARF_FRAME_REGNUM(REG) and
  * EH_RETURN_DATA_REGNO
  * c.f.: expand_builtin_eh_return_data_regno()
+ *
+ * NOTE: when gcc restores registers it relies on epilog code
+ * of the function containing the call to __builtin_eh_return
+ * (usually via the uw_install_context(CURRENT, TARGET) macro).
+ *
+ * If the epilog code does NOT restore the two result regs we
+ * are toast - there is run-time check which sadly
+ * results in a silent abort built into uw_install_context_1()
+ * look for the first gcc_assert
  */
  
 inline void
 _Unwind_PNaClSetResult0 (struct _Unwind_Context *context, _Unwind_Word val) {
 #if defined(__x86_64__)
-  int index = 0;
+  _Unwind_SetGR(context, 0, val);
+  return;
 #elif defined(__i386__)
-  int index = 0; 
+  _Unwind_SetGR(context, 0, val);
+  return;
+#elif defined(__arm__)
+  _Unwind_SetGR(context, 4, val);  /* first callee saved reg on ARM */
+  return;
 #else
-  int index = 0; /* untested */
+  #error "unknown platform"
   abort();
 #endif
-  _Unwind_SetGR(context, index, val);
+
 }
 
 /* abstract away __builtin_eh_return_data_regno(1) */
 inline  void
 _Unwind_PNaClSetResult1 (struct _Unwind_Context *context, _Unwind_Word val) {
 #if defined(__x86_64__)
-  int index = 1;
+  _Unwind_SetGR(context, 1, val);
+  return;
 #elif defined(__i386__)
-  int index = 2;
+  _Unwind_SetGR(context, 2, val);
+  return;
+#elif defined(__arm__)
+  _Unwind_SetGR(context, 5, val);  /* second callee saved reg on ARM */
+  return;
 #else
-  int index = 1; /* untested */
+  #error "unknown platform"
   abort();
 #endif
-  _Unwind_SetGR(context, index, val);
 }
 /* @LOCALMOD-END */
 
@@ -1539,6 +1557,23 @@ uw_init_context_1 (struct _Unwind_Context *context,
     }									 \
   while (0)
 
+
+/* LOCAMOD-START */
+/* Copy some register state from the target context to the current context.
+   The target context is roughly the saved register area of the function
+   called by the function we want to jump back into.
+   We copy this information into the saved register area of the currently
+   executing function F.
+   This is counter intuitive but when the epilog code of F is run we
+   get the effect of a mini longjmp.
+   This longjmp has two short commings, though:
+   * it does not set the pc
+   * it may not set the sp
+   This is compensated by the following built-in:
+   __builtin_eh_return (offset, handler);	
+ */
+/* LOCAMOD-END */
+ 
 static long
 uw_install_context_1 (struct _Unwind_Context *current,
 		      struct _Unwind_Context *target)
