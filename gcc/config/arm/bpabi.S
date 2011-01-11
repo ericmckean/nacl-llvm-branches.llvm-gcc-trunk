@@ -81,7 +81,7 @@ ARM_FUNC_START aeabi_ulcmp
 #ifdef L_aeabi_ldivmod
 
 ARM_FUNC_START aeabi_ldivmod
-	sub sp, sp, #8
+	sfi_sub sp, sp, #8
 /* APPLE LOCAL begin v7 support. Merge from mainline */
 #if defined(__thumb2__)
 	mov ip, sp
@@ -89,9 +89,10 @@ ARM_FUNC_START aeabi_ldivmod
 #else
 	do_push {sp, lr}
 #endif
+	sfi_call_preamble
 	bl SYM(__gnu_ldivmod_helper) __PLT__
 	ldr lr, [sp, #4]
-	add sp, sp, #8
+	sfi_add sp, sp, #8
 	do_pop {r2, r3}
 /* APPLE LOCAL end v7 support. Merge from mainline */
 	RET
@@ -109,7 +110,7 @@ ARM_FUNC_START aeabi_uldivmod
 #else
 	do_push {sp, lr}
 #endif
-        sfi_call_preamble
+	sfi_call_preamble
 	bl SYM(__gnu_uldivmod_helper) __PLT__
 	ldr lr, [sp, #4]
 	sfi_add sp, sp, #8
