@@ -33,13 +33,13 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "llvm/LLVMContext.h"
 #include "llvm/Module.h"
 #include "llvm/Analysis/ConstantFolding.h"
-#include "llvm/System/Host.h"
+#include "llvm/Support/Host.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetLowering.h"
 #include "llvm/Target/TargetData.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetFrameInfo.h"
+#include "llvm/Target/TargetFrameLowering.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/DenseMap.h"
 
@@ -185,7 +185,7 @@ TreeToLLVM::TreeToLLVM(tree fndecl) :
   }
 
   AllocaInsertionPoint = 0;
-  GreatestAlignment = TheTarget->getFrameInfo()->getStackAlignment();
+  GreatestAlignment = TheTarget->getFrameLowering()->getStackAlignment();
   SeenVLA = NULL;
 
   CatchAll = 0;
@@ -862,7 +862,7 @@ Function *TreeToLLVM::FinishFunctionBody() {
   // alignment, output a warning.  This is here so we don't warn every time
   // we see a variable.
   if (SeenVLA &&
-      GreatestAlignment > TheTarget->getFrameInfo()->getStackAlignment())
+      GreatestAlignment > TheTarget->getFrameLowering()->getStackAlignment())
       warning (0, "alignment for %q+D conflicts with a dynamically realigned "
                   "stack", SeenVLA);
 #endif
@@ -2174,6 +2174,7 @@ void TreeToLLVM::CreateExceptionValues() {
     CatchAll = new GlobalVariable(*TheModule, Init->getType(), true,
                                   GlobalVariable::LinkOnceAnyLinkage,
                                   Init, "llvm.eh.catch.all.value");
+    CatchAll->setUnnamedAddr(true);
     CatchAll->setSection("llvm.metadata");
     AttributeUsedGlobals.insert(CatchAll);
   }
@@ -8346,7 +8347,7 @@ AddBitFieldToRecordConstant(ConstantInt *ValC, uint64_t GCCFieldOffsetInBits) {
       ValC = 0;
     } else if (!BYTES_BIG_ENDIAN) {
       // Little endian, take bits from the bottom of the field value.
-      ValForPrevField.trunc(BitsInPreviousField);
+      ValForPrevField = ValForPrevField.trunc(BitsInPreviousField);
       APInt Tmp = ValC->getValue();
       Tmp = Tmp.lshr(BitsInPreviousField);
       Tmp = Tmp.trunc(ValBitSize-BitsInPreviousField);
@@ -8354,7 +8355,7 @@ AddBitFieldToRecordConstant(ConstantInt *ValC, uint64_t GCCFieldOffsetInBits) {
     } else {
       // Big endian, take bits from the top of the field value.
       ValForPrevField = ValForPrevField.lshr(ValBitSize-BitsInPreviousField);
-      ValForPrevField.trunc(BitsInPreviousField);
+      ValForPrevField = ValForPrevField.trunc(BitsInPreviousField);
 
       APInt Tmp = ValC->getValue();
       Tmp = Tmp.trunc(ValBitSize-BitsInPreviousField);
@@ -8363,7 +8364,7 @@ AddBitFieldToRecordConstant(ConstantInt *ValC, uint64_t GCCFieldOffsetInBits) {
 
     // Okay, we're going to insert ValForPrevField into the previous i8, extend
     // it and shift into place.
-    ValForPrevField.zext(8);
+    ValForPrevField = ValForPrevField.zext(8);
     if (!BYTES_BIG_ENDIAN) {
       ValForPrevField = ValForPrevField.shl(8-BitsInPreviousField);
     } else {
@@ -8391,23 +8392,19 @@ AddBitFieldToRecordConstant(ConstantInt *ValC, uint64_t GCCFieldOffsetInBits) {
     if (Val.getBitWidth() > 8) {
       if (!BYTES_BIG_ENDIAN) {
         // Little endian lays out low bits first.
-        APInt Tmp = Val;
-        Tmp.trunc(8);
+        APInt Tmp = Val.trunc(8);
         ValToAppend = ConstantInt::get(Context, Tmp);
 
         Val = Val.lshr(8);
       } else {
         // Big endian lays out high bits first.
-        APInt Tmp = Val;
-        Tmp = Tmp.lshr(Tmp.getBitWidth()-8);
-        Tmp.trunc(8);
+        APInt Tmp = Val.lshr(Val.getBitWidth()-8).trunc(8);
         ValToAppend = ConstantInt::get(Context, Tmp);
       }
     } else if (Val.getBitWidth() == 8) {
       ValToAppend = ConstantInt::get(Context, Val);
     } else {
-      APInt Tmp = Val;
-      Tmp.zext(8);
+      APInt Tmp = Val.zext(8);
 
       if (BYTES_BIG_ENDIAN)
         Tmp = Tmp << 8-Val.getBitWidth();
@@ -8419,7 +8416,7 @@ AddBitFieldToRecordConstant(ConstantInt *ValC, uint64_t GCCFieldOffsetInBits) {
 
     if (Val.getBitWidth() <= 8)
       break;
-    Val.trunc(Val.getBitWidth()-8);
+    Val = Val.trunc(Val.getBitWidth()-8);
   }
 }
 
@@ -8751,6 +8748,7 @@ Constant *TreeConstantToLLVM::EmitLV_COMPLEX_CST(tree exp) {
   // Create a new complex global.
   Slot = new GlobalVariable(*TheModule, Init->getType(), true,
                             GlobalVariable::PrivateLinkage, Init, ".cpx");
+  Slot->setUnnamedAddr(true);
   return Slot;
 }
 
@@ -8785,6 +8783,7 @@ Constant *TreeConstantToLLVM::EmitLV_STRING_CST(tree exp) {
   GlobalVariable *GV = new GlobalVariable(*TheModule, Init->getType(),
                                           StringIsConstant, Linkage, Init,
                                           ".str");
+  GV->setUnnamedAddr(true);
   GV->setAlignment(get_constant_alignment(exp) / 8);
 
   if (SlotP) *SlotP = GV;
