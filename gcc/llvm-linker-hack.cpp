@@ -61,6 +61,7 @@ void dummy_function() {
   llvm::createDefaultScheduler(NULL, llvm::CodeGenOpt::Default);
 
   llvm::createGVNPass();
+  llvm::createEarlyCSEPass();
   llvm::createLoopRotatePass();
   llvm::createLICMPass();
   llvm::createSCCPPass();
@@ -69,6 +70,7 @@ void dummy_function() {
   llvm::createLoopUnrollPass();
   llvm::createReassociatePass();
   llvm::createLoopUnswitchPass();
+  llvm::createLoopIdiomPass();
   llvm::createAggressiveDCEPass();
   llvm::createConstantMergePass();
   llvm::createIndVarSimplifyPass();
