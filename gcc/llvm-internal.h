@@ -614,6 +614,13 @@ private:
   Value *EmitREAL_CST(tree_node *exp);
   Value *EmitCONSTRUCTOR(tree_node *exp, const MemRef *DestLoc);
 
+  // @LOCALMOD-BEGIN
+  // NativeClient intrinsics.
+  Value *EmitNaClElfStart(tree_node *exp);
+  Value *EmitNaClSetjmp(tree_node *exp);
+  Value *EmitNaClLongjmp(tree_node *exp);
+  // @LOCALMOD-END
+
   // Optional target defined builtin intrinsic expanding function.
   bool TargetIntrinsicLower(tree_node *exp,
                             unsigned FnCode,
