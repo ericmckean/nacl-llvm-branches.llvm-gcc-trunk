@@ -6325,6 +6325,22 @@ bool TreeToLLVM::EmitBuiltinCall(tree exp, tree fndecl,
   case BUILT_IN_NACL_LONGJMP:
     Result = EmitNaClLongjmp(exp);
     return true;
+
+  case BUILT_IN_NACL_TLS_ALIGNMENT:
+    Result = EmitNaClTlsAlignment(exp);
+    return true;
+
+  case BUILT_IN_NACL_TDB_OFFSET_IN_TLS:
+    Result = EmitNaClTdbOffsetInTls(exp);
+    return true;
+
+  case BUILT_IN_NACL_TDB_EFFECTIVE_PAYLOAD_SIZE:
+    Result = EmitNaClTdbEffectivePayloadSize(exp);
+    return true;
+
+  case BUILT_IN_NACL_RETURN_ADDRESS_SIZE:
+    Result = EmitNaClReturnAddressSize(exp);
+    return true;
   // @LOCALMOD-END
   }
   return false;
@@ -8215,12 +8231,10 @@ Value *TreeToLLVM::EmitNaClElfStart(tree_node *exp) {
 
   Value *NaClStartFunc = Emit(TREE_VALUE(ArgList), 0);
   NaClStartFunc = BitCastToType(NaClStartFunc, Type::getInt8PtrTy(Context));
-  SmallVector<Value *, 1> Args;
-  Args.push_back(NaClStartFunc);
 
   Builder.CreateCall(Intrinsic::getDeclaration(TheModule,
                                                Intrinsic::nacl_elf_start),
-                     Args.begin(), Args.end());
+                     NaClStartFunc);
   return 0;
 }
 
@@ -8234,21 +8248,15 @@ Value *TreeToLLVM::EmitNaClSetjmp(tree_node *exp) {
   Value *JmpBuf = Emit(TREE_VALUE(ArgList), 0);
   JmpBuf = BitCastToType(JmpBuf, Type::getInt8PtrTy(Context));
   Constant *Level = ConstantInt::get(Type::getInt32Ty(Context), 0);
-  SmallVector<Value *, 1> RetAddrArgs;
-  RetAddrArgs.push_back(Level);
-  Value *RetAddr =
-      Builder.CreateCall(Intrinsic::getDeclaration(TheModule,
-                                                   Intrinsic::returnaddress),
-                                                   RetAddrArgs.begin(),
-                                                   RetAddrArgs.end());
-  SmallVector<Value *, 2> Args;
-  Args.push_back(JmpBuf);
-  Args.push_back(RetAddr);
+  Value *RetAddr = Builder.CreateCall(
+                       Intrinsic::getDeclaration(TheModule,
+                                                 Intrinsic::returnaddress),
+                       Level);
 
-  Value* Call = Builder.CreateCall(
+  Value* Call = Builder.CreateCall2(
                     Intrinsic::getDeclaration(TheModule,
                                               Intrinsic::nacl_setjmp),
-                    Args.begin(), Args.end());
+                    JmpBuf, RetAddr);
   return Call;
 }
 
@@ -8262,17 +8270,63 @@ Value *TreeToLLVM::EmitNaClLongjmp(tree_node *exp) {
   Value *JmpBuf = Emit(TREE_VALUE(ArgList), 0);
   JmpBuf = BitCastToType(JmpBuf, Type::getInt8PtrTy(Context));
   Value *RetVal = Emit(TREE_VALUE(TREE_CHAIN(ArgList)), 0);
-  SmallVector<Value *, 2> Args;
-  Args.push_back(JmpBuf);
-  Args.push_back(RetVal);
 
-  Builder.CreateCall(Intrinsic::getDeclaration(TheModule,
-                                               Intrinsic::nacl_longjmp),
-                     Args.begin(), Args.end());
+  Builder.CreateCall2(Intrinsic::getDeclaration(TheModule,
+                                                Intrinsic::nacl_longjmp),
+                      JmpBuf, RetVal);
   // Emit an explicit unreachable instruction.
   Builder.CreateUnreachable();
   EmitBlock(BasicBlock::Create(Context, ""));
   return 0;
+}
+
+Value *TreeToLLVM::EmitNaClTlsAlignment(tree_node *exp) {
+  Value *Call = Builder.CreateCall(
+                    Intrinsic::getDeclaration(TheModule,
+                                              Intrinsic::nacl_tls_alignment));
+  return Call;
+}
+
+Value *TreeToLLVM::EmitNaClTdbOffsetInTls(tree_node *exp) {
+  tree ArgList = TREE_OPERAND(exp, 1);
+
+  if (!validate_arglist(ArgList, INTEGER_TYPE, VOID_TYPE)) {
+    error("`__builtin_nacl_offset_in_tls' should take int");
+  }
+
+  Value *TlsDataAndBssSize = Emit(TREE_VALUE(ArgList), 0);
+
+  Value *Call = Builder.CreateCall(
+                    Intrinsic::getDeclaration(
+                        TheModule,
+                        Intrinsic::nacl_tdb_offset_in_tls),
+                    TlsDataAndBssSize);
+  return Call;
+}
+
+Value *TreeToLLVM::EmitNaClTdbEffectivePayloadSize(tree_node *exp) {
+  tree ArgList = TREE_OPERAND(exp, 1);
+
+  if (!validate_arglist(ArgList, INTEGER_TYPE, VOID_TYPE)) {
+    error("`__builtin_nacl_tdb_effective_payload_size' should take int");
+  }
+
+  Value *TdbSize = Emit(TREE_VALUE(ArgList), 0);
+
+  Value *Call = Builder.CreateCall(
+                    Intrinsic::getDeclaration(
+                        TheModule,
+                        Intrinsic::nacl_tdb_effective_payload_size),
+                    TdbSize);
+  return Call;
+}
+
+Value *TreeToLLVM::EmitNaClReturnAddressSize(tree_node *exp) {
+  Value *Call = Builder.CreateCall(
+                    Intrinsic::getDeclaration(
+                        TheModule,
+                        Intrinsic::nacl_return_address_size));
+  return Call;
 }
 // @LOCALMOD-END
 
