@@ -213,28 +213,28 @@ LSYM(Lend_fde):
 	bx	lr
 #else
 #define RETLDM \
-	ldr     lr, [sp], #8
-  sfi_bx  lr
+	ldr     lr, [sp], #8 ; \
+        sfi_bx  lr
 /* APPLE LOCAL begin v7 support. Merge from mainline */
 #if defined (__thumb2__)
 #define RETLDM1(...) \
-	pop   {__VA_ARGS__, lr}
-  sfi_bx lr
+	pop   {__VA_ARGS__, lr} ; \
+        sfi_bx lr
 #define RETLDM2(cond,...) \
-	pop##cond   {__VA_ARGS__, lr}
-  sfi_bx lr
+	pop##cond   {__VA_ARGS__, lr} ; \
+        sfi_bx lr
 #else
 #define RETLDM1(...) \
-	ldmia   sp!, {__VA_ARGS__, lr}
-  sfi_bx lr
+	ldmia   sp!, {__VA_ARGS__, lr} ; \
+        sfi_bx lr
 #define RETLDM2(cond,...) \
-	ldm##cond##ia   sp!, {__VA_ARGS__, lr}
-  sfi_bx lr
+	ldm##cond##ia   sp!, {__VA_ARGS__, lr} ; \
+        sfi_bx lr
 #endif
 /* APPLE LOCAL end v7 support. Merge from mainline */
 #define RETLDM_unwind(addr) \
-	ldr	lr, [sp], #8
-  sfi_bx lr
+	ldr	lr, [sp], #8 ; \
+        sfi_bx lr
 #endif
 
 /* APPLE LOCAL begin v7 support. Merge from mainline */
