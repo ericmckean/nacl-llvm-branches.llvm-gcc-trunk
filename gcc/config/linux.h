@@ -76,10 +76,7 @@ Boston, MA 02110-1301, USA.  */
 
 #define LINUX_TARGET_OS_CPP_BUILTINS()				\
     do {							\
-	builtin_define ("__gnu_linux__");			\
-	builtin_define_std ("linux");				\
 	builtin_define_std ("unix");				\
-	builtin_assert ("system=linux");			\
 	builtin_assert ("system=unix");				\
 	builtin_assert ("system=posix");			\
     } while (0)
