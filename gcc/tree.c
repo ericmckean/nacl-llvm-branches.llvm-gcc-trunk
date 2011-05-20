@@ -6748,11 +6748,11 @@ build_common_tree_nodes_2 (int short_double)
       {
         /* If not expanding va_arg, make va_list large enough
            so that the generated bitcode will work on all platforms.
-           (e.g., X86-64 needs exactly 24-bytes for va_list) */
+           (in particular, NaCl X86-64 needs exactly 16-bytes for va_list) */
 
         t = build_array_type (
-                long_long_unsigned_type_node,
-                build_index_type (build_int_cst (NULL_TREE, 3-1)));
+                unsigned_type_node,
+                build_index_type (build_int_cst (NULL_TREE, 4-1)));
       }
     else
         t = targetm.build_builtin_va_list ();
