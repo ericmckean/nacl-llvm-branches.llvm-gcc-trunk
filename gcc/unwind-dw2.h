@@ -34,6 +34,8 @@
 #define DWARF_FRAME_REGISTERS FIRST_PSEUDO_REGISTER
 #endif
 
+#include "pnacl-unwind.h" /* @LOCALMOD */
+
 /* The result of interpreting the frame unwind info for a frame.
    This is all symbolic at this point, as none of the values can
    be resolved until the target pc is located.  */
@@ -57,7 +59,7 @@ typedef struct
 	REG_SAVED_VAL_OFFSET,
 	REG_SAVED_VAL_EXP
       } how;
-    } reg[DWARF_FRAME_REGISTERS+1];
+    } reg[PNACL_MAX_DWARF_FRAME_REGISTERS+1];  /* @LOCALMOD */
 
     /* Used to implement DW_CFA_remember_state.  */
     struct frame_state_reg_info *prev;
@@ -88,4 +90,3 @@ typedef struct
   unsigned char signal_frame;
   void *eh_ptr;
 } _Unwind_FrameState;
-
