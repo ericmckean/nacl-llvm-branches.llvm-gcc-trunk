@@ -51,6 +51,8 @@
 #define STACK_GROWS_DOWNWARD 1
 #endif
 
+#include "pnacl-unwind.h" /* @LOCALMOD */
+
 /* Dwarf frame registers used for pre gcc 3.0 compiled glibc.  */
 #ifndef PRE_GCC3_DWARF_FRAME_REGISTERS
 #define PRE_GCC3_DWARF_FRAME_REGISTERS DWARF_FRAME_REGISTERS
@@ -82,7 +84,7 @@ static void mymemcpy(char* dst, const char* src, int len) {
    to its caller.  */
 struct _Unwind_Context
 {
-  void *reg[DWARF_FRAME_REGISTERS+1];
+  void *reg[PNACL_MAX_DWARF_FRAME_REGISTERS+1]; /* @LOCALMOD */
   void *cfa;
   void *ra;
   void *lsda;
@@ -96,7 +98,7 @@ struct _Unwind_Context
      struct _Unwind_Context.  */
   _Unwind_Word version;
   _Unwind_Word args_size;
-  char by_value[DWARF_FRAME_REGISTERS+1];
+  char by_value[PNACL_MAX_DWARF_FRAME_REGISTERS+1]; /* @LOCALMOD */
 };
 
 /* @LOCALMOD-START */
@@ -128,7 +130,8 @@ void DUMP_FS(_Unwind_FrameState* fs) {
 /* @LOCALMOD-END */
 
 /* Byte size of every register managed by these routines.  */
-static unsigned char dwarf_reg_size_table[DWARF_FRAME_REGISTERS+1];
+/* @LOCALMOD */
+static unsigned char dwarf_reg_size_table[PNACL_MAX_DWARF_FRAME_REGISTERS+1];
 
 
 /* Read unaligned data from the instruction buffer.  */
@@ -295,38 +298,13 @@ _Unwind_SetGR (struct _Unwind_Context *context, int index, _Unwind_Word val)
  
 inline void
 _Unwind_PNaClSetResult0 (struct _Unwind_Context *context, _Unwind_Word val) {
-#if defined(__x86_64__)
-  _Unwind_SetGR(context, 0, val);
-  return;
-#elif defined(__i386__)
-  _Unwind_SetGR(context, 0, val);
-  return;
-#elif defined(__arm__)
-  _Unwind_SetGR(context, 4, val);  /* first callee saved reg on ARM */
-  return;
-#else
-  #error "unknown platform"
-  abort();
-#endif
-
+  _Unwind_SetGR(context, pnacl_unwind_result0_reg(), val);
 }
 
 /* abstract away __builtin_eh_return_data_regno(1) */
 inline  void
 _Unwind_PNaClSetResult1 (struct _Unwind_Context *context, _Unwind_Word val) {
-#if defined(__x86_64__)
-  _Unwind_SetGR(context, 1, val);
-  return;
-#elif defined(__i386__)
-  _Unwind_SetGR(context, 2, val);
-  return;
-#elif defined(__arm__)
-  _Unwind_SetGR(context, 5, val);  /* second callee saved reg on ARM */
-  return;
-#else
-  #error "unknown platform"
-  abort();
-#endif
+  _Unwind_SetGR(context, pnacl_unwind_result1_reg(), val);
 }
 /* @LOCALMOD-END */
 
@@ -1268,10 +1246,10 @@ typedef struct frame_state
   void *eh_ptr;
   long cfa_offset;
   long args_size;
-  long reg_or_offset[PRE_GCC3_DWARF_FRAME_REGISTERS+1];
+  long reg_or_offset[PNACL_MAX_DWARF_FRAME_REGISTERS+1];
   unsigned short cfa_reg;
   unsigned short retaddr_column;
-  char saved[PRE_GCC3_DWARF_FRAME_REGISTERS+1];
+  char saved[PNACL_MAX_DWARF_FRAME_REGISTERS+1];
 } frame_state;
 
 struct frame_state * __frame_state_for (void *, struct frame_state *);
