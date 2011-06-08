@@ -25,7 +25,7 @@
    GAS always supports weak symbols.  */
 
 /* Unsigned chars produces much better code than signed.  */
-#define DEFAULT_SIGNED_CHAR 0
+#define DEFAULT_SIGNED_CHAR 1 // @LOCALMOD
 
 #undef  SUBTARGET_CPP_SPEC
 #define SUBTARGET_CPP_SPEC  "%{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"

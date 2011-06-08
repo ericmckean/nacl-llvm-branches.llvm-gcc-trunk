@@ -2554,7 +2554,7 @@ while (0)
 /* signed 'char' is most compatible, but RISC OS wants it unsigned.
    unsigned is probably best, but may break some code.  */
 #ifndef DEFAULT_SIGNED_CHAR
-#define DEFAULT_SIGNED_CHAR  0
+#define DEFAULT_SIGNED_CHAR  1 // @LOCALMOD
 #endif
 
 /* Max number of bytes we can move from memory to memory
