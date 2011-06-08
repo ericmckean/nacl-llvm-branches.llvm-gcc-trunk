@@ -25,5 +25,6 @@ extern int pnacl_unwind_dwarf_sp_column();
 extern int pnacl_unwind_result0_reg();
 extern int pnacl_unwind_result1_reg();
 extern int pnacl_unwind_dwarf_frame_registers();
+extern int pnacl_unwind_init_dwarf_reg_size_table();
 
 #endif /* PNACL_UNWIND_H */
