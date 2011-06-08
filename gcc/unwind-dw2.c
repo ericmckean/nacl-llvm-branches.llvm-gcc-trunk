@@ -46,6 +46,8 @@
 
 #ifndef STACK_GROWS_DOWNWARD
 #define STACK_GROWS_DOWNWARD 0
+/* @LOCALMOD TODO: make this into an intrinsic */
+#error "pnacl requires downward growing stack"
 #else
 #undef STACK_GROWS_DOWNWARD
 #define STACK_GROWS_DOWNWARD 1
@@ -60,6 +62,8 @@
 
 #ifndef DWARF_REG_TO_UNWIND_COLUMN
 #define DWARF_REG_TO_UNWIND_COLUMN(REGNO) (REGNO)
+#else
+#error "pnacl requires dwarf identity mapping" /* @LOCALMOD */
 #endif
 
 /* @LOCALMOD-START */
@@ -84,6 +88,13 @@ static void mymemcpy(char* dst, const char* src, int len) {
    to its caller.  */
 struct _Unwind_Context
 {
+  /*
+   * TODO(robertm): "reg" and possibly other members may need to hold  
+   * 64 bit quantities on x86-64 (e.g. when by_value is true). 
+   * This needs to be revisited with tests that check that the upper
+   * half of a 64bit reg is properly restored.
+   * We probably also need to force _UnwindPtr and/or _UnwindWord to be 64bit.
+   */
   void *reg[PNACL_MAX_DWARF_FRAME_REGISTERS+1]; /* @LOCALMOD */
   void *cfa;
   void *ra;
@@ -103,10 +114,14 @@ struct _Unwind_Context
 
 /* @LOCALMOD-START */
 #if 0
+/* NOTE: usually gcc_assert just fails silently */
+/* NOTE: this version does not abort */ 
+#define gcc_assert(a) if (!(a)) printf("ASSERT FAILED: " #a "\n");
+
 void DUMP_CONTEXT(struct _Unwind_Context* c) {
   int i;
-  printf("--------  _Unwind_Context: %p, cfa: %p,  ra: %p, lsda: %p\n",
-         c, c->cfa, c->ra, c->lsda);
+  printf("--------  _Unwind_Context: %p, cfa: %p,  ra: %p, lsda: %p, flags: %x\n",
+         c, c->cfa, c->ra, c->lsda, c->flags);
   for (i = 0; i < DWARF_FRAME_REGISTERS+1; i++) {
     printf("reg %2d: %p (by val %d)", i, c->reg[i], c->by_value[i]);
     if  (!c->by_value[i] && c->reg[i] != 0) { 
@@ -208,11 +223,12 @@ _Unwind_GetGR (struct _Unwind_Context *context, int index)
   void *ptr;
 
 #ifdef DWARF_ZERO_REG
+#error "pnacl does not support DWARF_ZERO_REG" /* @LOCALMOD */
   if (index == DWARF_ZERO_REG)
     return 0;
 #endif
   index = DWARF_REG_TO_UNWIND_COLUMN (index);
-  gcc_assert (index < (int) sizeof(dwarf_reg_size_table));
+  gcc_assert (index < DWARF_FRAME_REGISTERS + 1);  /* @LOCALMOD */
   size = dwarf_reg_size_table[index];
   ptr = context->reg[index];
   if (_Unwind_IsExtendedContext (context) && context->by_value[index])
@@ -223,7 +239,8 @@ _Unwind_GetGR (struct _Unwind_Context *context, int index)
     return * (_Unwind_Ptr *) ptr;
   else
     {
-      gcc_assert (size == sizeof(_Unwind_Word));
+      /* @LOCALMOD this actually fires for x86-64 */
+      /* gcc_assert (size == sizeof(_Unwind_Word) && "GetGR"); */
       return * (_Unwind_Word *) ptr;
     }
 }
@@ -249,9 +266,9 @@ _Unwind_SetGR (struct _Unwind_Context *context, int index, _Unwind_Word val)
 {
   int size;
   void *ptr;
-
+  
   index = DWARF_REG_TO_UNWIND_COLUMN (index);
-  gcc_assert (index < (int) sizeof(dwarf_reg_size_table));
+  gcc_assert (index < DWARF_FRAME_REGISTERS + 1);  /* @LOCALMOD */
   size = dwarf_reg_size_table[index];
 
   if (_Unwind_IsExtendedContext (context) && context->by_value[index])
@@ -266,7 +283,8 @@ _Unwind_SetGR (struct _Unwind_Context *context, int index, _Unwind_Word val)
     * (_Unwind_Ptr *) ptr = val;
   else
     {
-      gcc_assert (size == sizeof(_Unwind_Word));
+      /* @LOCALMOD this actually fires for x86-64 */
+      /* gcc_assert (size == sizeof(_Unwind_Word) && "SetGR"); */
       * (_Unwind_Word *) ptr = val;
     }
 }
@@ -337,7 +355,7 @@ _Unwind_SetGRValue (struct _Unwind_Context *context, int index,
 		    _Unwind_Word val)
 {
   index = DWARF_REG_TO_UNWIND_COLUMN (index);
-  gcc_assert (index < (int) sizeof(dwarf_reg_size_table));
+  gcc_assert (index < DWARF_FRAME_REGISTERS + 1);   /* @LOCALMOD */
   gcc_assert (dwarf_reg_size_table[index] == sizeof (_Unwind_Ptr));
 
   context->by_value[index] = 1;
@@ -1191,6 +1209,7 @@ uw_frame_state_for (struct _Unwind_Context *context, _Unwind_FrameState *fs)
   if (fde == NULL)
     {
 #ifdef MD_FALLBACK_FRAME_STATE_FOR
+#error "pnacl does not support MD_FALLBACK_FRAME_STATE_FOR" /* @LOCALMOD */
       /* Couldn't find frame unwind info for this function.  Try a
 	 target-specific fallback mechanism.  This will necessarily
 	 not provide a personality routine or LSDA.  */
@@ -1315,7 +1334,8 @@ _Unwind_SetSpColumn (struct _Unwind_Context *context, void *cfa,
     tmp_sp->ptr = (_Unwind_Ptr) cfa;
   else
     {
-      gcc_assert (size == sizeof(_Unwind_Word));
+      /* @LOCALMOD this actually fires for x86-64 */
+      /* gcc_assert (size == sizeof(_Unwind_Word && "SetSpColumn")); */
       tmp_sp->word = (_Unwind_Ptr) cfa;
     }
   _Unwind_SetGRPtr (context, __builtin_dwarf_sp_column (), tmp_sp);
@@ -1328,7 +1348,7 @@ uw_update_context_1 (struct _Unwind_Context *context, _Unwind_FrameState *fs)
   void *cfa;
   long i;
 
-#ifdef EH_RETURN_STACKADJ_RTX
+#ifdef EH_RETURN_STACKADJ_RTX 
   /* Special handling here: Many machines do not use a frame pointer,
      and track the CFA only through offsets from the stack pointer from
      one frame to the next.  In this case, the stack pointer is never
@@ -1349,6 +1369,8 @@ uw_update_context_1 (struct _Unwind_Context *context, _Unwind_FrameState *fs)
   if (!_Unwind_GetGRPtr (&orig_context, __builtin_dwarf_sp_column ()))
     _Unwind_SetSpColumn (&orig_context, context->cfa, &tmp_sp);
   _Unwind_SetGRPtr (context, __builtin_dwarf_sp_column (), NULL);
+#else
+#error "pnacl requires EH_RETURN_STACKADJ_RTX to be general" /* @LOCALMOD */
 #endif
 
   /* Compute this frame's CFA.  */
@@ -1434,6 +1456,7 @@ uw_update_context_1 (struct _Unwind_Context *context, _Unwind_FrameState *fs)
   _Unwind_SetSignalFrame (context, fs->signal_frame);
 
 #ifdef MD_FROB_UPDATE_CONTEXT
+#error "pnacl does not support MD_FROB_UPDATE_CONTEXT" /* @LOCALMOD */
   MD_FROB_UPDATE_CONTEXT (context, fs);
 #endif
 }
@@ -1476,7 +1499,10 @@ uw_advance_context (struct _Unwind_Context *context, _Unwind_FrameState *fs)
 static inline void
 init_dwarf_reg_size_table (void)
 {
-  __builtin_init_dwarf_reg_size_table (dwarf_reg_size_table);
+  /* @LOCALMOD */
+   pnacl_unwind_init_dwarf_reg_size_table (dwarf_reg_size_table); 
+   /*  __builtin_init_dwarf_reg_size_table (dwarf_reg_size_table); */
+
 }
 
 static void
