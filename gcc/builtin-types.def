@@ -217,8 +217,8 @@ DEF_FUNCTION_TYPE_1 (BT_FN_UINT32_UINT32, BT_UINT32, BT_UINT32)
 DEF_FUNCTION_TYPE_1 (BT_FN_UINT64_UINT64, BT_UINT64, BT_UINT64)
 /* APPLE LOCAL end mainline bswap */
 /* @LOCALMOD-BEGIN */
-/* For PNaCl we need functions that return a size_t but take no parameters. */
-DEF_FUNCTION_TYPE_1 (BT_FN_SIZE_SIZE, BT_SIZE, BT_SIZE)
+/* For PNaCl we need functions that take a size_t and return a ptrdiff_t.  */
+DEF_FUNCTION_TYPE_1 (BT_FN_SSIZE_SIZE, BT_SSIZE, BT_SIZE)
 /* @LOCALMOD-END */
 
 DEF_POINTER_TYPE (BT_PTR_FN_VOID_PTR, BT_FN_VOID_PTR)

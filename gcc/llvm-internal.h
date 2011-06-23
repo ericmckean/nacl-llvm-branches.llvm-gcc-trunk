@@ -619,10 +619,11 @@ private:
   Value *EmitNaClElfStart(tree_node *exp);
   Value *EmitNaClSetjmp(tree_node *exp);
   Value *EmitNaClLongjmp(tree_node *exp);
-  Value *EmitNaClTlsAlignment(tree_node *exp);
-  Value *EmitNaClTdbOffsetInTls(tree_node *exp);
-  Value *EmitNaClTdbEffectivePayloadSize(tree_node *exp);
-  Value *EmitNaClReturnAddressSize(tree_node *exp);
+
+  Value *EmitNaClThreadStackPadding(tree_node *exp);
+  Value *EmitNaClTpAlignment(tree_node *exp);
+  Value *EmitNaClTpTlsOffset(tree_node *exp);
+  Value *EmitNaClTpTdbOffset(tree_node *exp);
   // @LOCALMOD-END
 
   // Optional target defined builtin intrinsic expanding function.
