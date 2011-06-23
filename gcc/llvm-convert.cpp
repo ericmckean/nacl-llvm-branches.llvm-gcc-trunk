@@ -6326,21 +6326,22 @@ bool TreeToLLVM::EmitBuiltinCall(tree exp, tree fndecl,
     Result = EmitNaClLongjmp(exp);
     return true;
 
-  case BUILT_IN_NACL_TLS_ALIGNMENT:
-    Result = EmitNaClTlsAlignment(exp);
+  case BUILT_IN_NACL_THREAD_STACK_PADDING:
+    Result = EmitNaClThreadStackPadding(exp);
     return true;
 
-  case BUILT_IN_NACL_TDB_OFFSET_IN_TLS:
-    Result = EmitNaClTdbOffsetInTls(exp);
+  case BUILT_IN_NACL_TP_ALIGNMENT:
+    Result = EmitNaClTpAlignment(exp);
     return true;
 
-  case BUILT_IN_NACL_TDB_EFFECTIVE_PAYLOAD_SIZE:
-    Result = EmitNaClTdbEffectivePayloadSize(exp);
+  case BUILT_IN_NACL_TP_TLS_OFFSET:
+    Result = EmitNaClTpTlsOffset(exp);
     return true;
 
-  case BUILT_IN_NACL_RETURN_ADDRESS_SIZE:
-    Result = EmitNaClReturnAddressSize(exp);
+  case BUILT_IN_NACL_TP_TDB_OFFSET:
+    Result = EmitNaClTpTdbOffset(exp);
     return true;
+
   // @LOCALMOD-END
   }
   return false;
@@ -8280,35 +8281,43 @@ Value *TreeToLLVM::EmitNaClLongjmp(tree_node *exp) {
   return 0;
 }
 
-Value *TreeToLLVM::EmitNaClTlsAlignment(tree_node *exp) {
+Value *TreeToLLVM::EmitNaClThreadStackPadding(tree_node *exp) {
   Value *Call = Builder.CreateCall(
-                    Intrinsic::getDeclaration(TheModule,
-                                              Intrinsic::nacl_tls_alignment));
+                    Intrinsic::getDeclaration(
+                        TheModule,
+                        Intrinsic::nacl_thread_stack_padding));
   return Call;
 }
 
-Value *TreeToLLVM::EmitNaClTdbOffsetInTls(tree_node *exp) {
+Value *TreeToLLVM::EmitNaClTpAlignment(tree_node *exp) {
+  Value *Call = Builder.CreateCall(
+                    Intrinsic::getDeclaration(TheModule,
+                                              Intrinsic::nacl_tp_alignment));
+  return Call;
+}
+
+Value *TreeToLLVM::EmitNaClTpTlsOffset(tree_node *exp) {
   tree ArgList = TREE_OPERAND(exp, 1);
 
   if (!validate_arglist(ArgList, INTEGER_TYPE, VOID_TYPE)) {
-    error("`__builtin_nacl_offset_in_tls' should take int");
+    error("`__builtin_nacl_tp_tls_offset' should take size_t");
   }
 
-  Value *TlsDataAndBssSize = Emit(TREE_VALUE(ArgList), 0);
+  Value *TlsSize = Emit(TREE_VALUE(ArgList), 0);
 
   Value *Call = Builder.CreateCall(
                     Intrinsic::getDeclaration(
                         TheModule,
-                        Intrinsic::nacl_tdb_offset_in_tls),
-                    TlsDataAndBssSize);
+                        Intrinsic::nacl_tp_tls_offset),
+                    TlsSize);
   return Call;
 }
 
-Value *TreeToLLVM::EmitNaClTdbEffectivePayloadSize(tree_node *exp) {
+Value *TreeToLLVM::EmitNaClTpTdbOffset(tree_node *exp) {
   tree ArgList = TREE_OPERAND(exp, 1);
 
   if (!validate_arglist(ArgList, INTEGER_TYPE, VOID_TYPE)) {
-    error("`__builtin_nacl_tdb_effective_payload_size' should take int");
+    error("`__builtin_nacl_tp_tdb_offset' should take size_t");
   }
 
   Value *TdbSize = Emit(TREE_VALUE(ArgList), 0);
@@ -8316,18 +8325,11 @@ Value *TreeToLLVM::EmitNaClTdbEffectivePayloadSize(tree_node *exp) {
   Value *Call = Builder.CreateCall(
                     Intrinsic::getDeclaration(
                         TheModule,
-                        Intrinsic::nacl_tdb_effective_payload_size),
+                        Intrinsic::nacl_tp_tdb_offset),
                     TdbSize);
   return Call;
 }
 
-Value *TreeToLLVM::EmitNaClReturnAddressSize(tree_node *exp) {
-  Value *Call = Builder.CreateCall(
-                    Intrinsic::getDeclaration(
-                        TheModule,
-                        Intrinsic::nacl_return_address_size));
-  return Call;
-}
 // @LOCALMOD-END
 
 
