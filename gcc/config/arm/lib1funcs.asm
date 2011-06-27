@@ -32,9 +32,6 @@ Boston, MA 02110-1301, USA.  */
 
 /* We need to know what prefix to add to function names.  */
 
-/* @LOCALMOD: This must be the first thing in the file */
-#include "naclmacros.asm"
-
 #ifndef __USER_LABEL_PREFIX__
 #error  __USER_LABEL_PREFIX__ not defined
 #endif
@@ -100,8 +97,8 @@ Boston, MA 02110-1301, USA.  */
 
 #if (__ARM_ARCH__ > 4) || defined(__ARM_ARCH_4T__)
 
-# define RET		sfi_bx	lr
-# define RETc(x)	sfi_bx##x	lr
+# define RET		bx	lr
+# define RETc(x)	bx##x	lr
 
 /* Special precautions for interworking on armv4t.  */
 # if (__ARM_ARCH__ == 4)
@@ -119,7 +116,7 @@ Boston, MA 02110-1301, USA.  */
 #endif /* __ARM_ARCH == 4 */
 
 #else
-/* LOCALMOD we do not support ARCH 4 in NaCl, no changes here. */
+
 # define RET		mov	pc, lr
 # define RETc(x)	mov##x	pc, lr
 
@@ -213,28 +210,22 @@ LSYM(Lend_fde):
 	bx	lr
 #else
 #define RETLDM \
-	ldr     lr, [sp], #8 ; \
-        sfi_bx  lr
+	ldr     pc, [sp], #8
 /* APPLE LOCAL begin v7 support. Merge from mainline */
 #if defined (__thumb2__)
 #define RETLDM1(...) \
-	pop   {__VA_ARGS__, lr} ; \
-        sfi_bx lr
+	pop   {__VA_ARGS__, pc}
 #define RETLDM2(cond,...) \
-	pop##cond   {__VA_ARGS__, lr} ; \
-        sfi_bx lr
+	pop##cond   {__VA_ARGS__, pc}
 #else
 #define RETLDM1(...) \
-	ldmia   sp!, {__VA_ARGS__, lr} ; \
-        sfi_bx lr
+	ldmia   sp!, {__VA_ARGS__, pc}
 #define RETLDM2(cond,...) \
-	ldm##cond##ia   sp!, {__VA_ARGS__, lr} ; \
-        sfi_bx lr
+	ldm##cond##ia   sp!, {__VA_ARGS__, pc}
 #endif
 /* APPLE LOCAL end v7 support. Merge from mainline */
 #define RETLDM_unwind(addr) \
-	ldr	lr, [sp], #8 ; \
-        sfi_bx lr
+	ldr	pc, [sp], #8
 #endif
 
 /* APPLE LOCAL begin v7 support. Merge from mainline */
@@ -301,7 +292,6 @@ LSYM(Lend_fde):
 #if !defined(__MACH__)
 98:	cfi_push 98b - __\name, 0xe, -0x8, 0x8
 #endif
-  sfi_call_preamble
 	bl	SYM (__div0) __PLT__
 	mov	r0, #0			@ About as wrong as it could be.
 	RETLDM_unwind (8b)
@@ -313,15 +303,13 @@ LSYM(Lend_fde):
 #if !defined(__MACH__)
 7:	cfi_push 7b - __\name, 0xe, -0x4, 0x8
 #endif
-  sfi_call_preamble
 	bl	SYM (__div0)
 	mov	r0, #0			@ About as wrong as it could be.
 #if defined (__INTERWORKING__)
 	pop	{ r1, r2 }
 	bx	r2
 #else
-	pop	{ r1, lr }
-  sfi_bx lr
+	pop	{ r1, pc }
 #endif
 .endm
 
@@ -384,7 +372,7 @@ SYM (\name):
 #define THUMB_FUNC
 #define THUMB_CODE
 /* APPLE LOCAL ARM function alignment */
-#define FUNC_ALIGN .align 4
+#define FUNC_ALIGN .align 2
 /* APPLE LOCAL v7 support. Merge from mainline */
 #define THUMB_SYNTAX
 #endif
@@ -403,7 +391,7 @@ SYM (__$0):
 	.text
 	.globl SYM (__\name)
 	TYPE (__\name)
-	.align 4
+	.align 0
 	THUMB_CODE
 	THUMB_FUNC
 SYM (__\name):
@@ -430,7 +418,6 @@ SYM (__\name):
 #if defined(__MACH__)
   bl ___$0
 #else
-  sfi_call_preamble
   bl  ___\name
 #endif
 .endm
@@ -484,7 +471,7 @@ SYM (__$0):
 	.text
 	.globl SYM (__\name)
 	TYPE (__\name)
-	.align 4
+	.align 0
 	.arm
 SYM (__\name):
 #endif
@@ -494,7 +481,6 @@ SYM (__\name):
 #if defined(__MACH__)
 	bl	SYM (__$0)
 #else
-  sfi_call_preamble
 	bl	__\name
 #endif
 .endm
@@ -548,18 +534,16 @@ pc		.req	r15
 	.set	shift, shift - 1				; \
 	cmp	dividend, divisor, lsl #shift			; \
 	adc	result, result, result				; \
-	subcs	dividend, dividend, divisor, lsl #shift  ; \
-  nop
+	subcs	dividend, dividend, divisor, lsl #shift
 #define ARM_DIV_BODY(dividend, divisor, result, curbit)	  	  \
 	clz	curbit, dividend				; \
 	clz	result, divisor					; \
 	sub	curbit, result, curbit				; \
 	rsbs	curbit, curbit, #31				; \
+	addne	curbit, curbit, curbit, lsl #1			; \
 	mov	result, #0					; \
-  sfi_new_bundle                ; \
-  add curbit, pc, curbit, lsl #4  ; \
-  add curbit, curbit, #8  ; \
-  sfi_bxne curbit         ; \
+	addne	pc, pc, curbit, lsl #2				; \
+	nop							; \
 	.set	shift, 32					; \
 	ARMV5_DIV_LOOP (dividend, divisor, result)		; \
 	ARMV5_DIV_LOOP (dividend, divisor, result)		; \
@@ -687,18 +671,14 @@ pc		.req	r15
 #define ARMV5_MOD_LOOP(dividend, divisor)			  \
 	.set	shift, shift - 1				; \
 	cmp	dividend, divisor, lsl #shift			; \
-	subcs	dividend, dividend, divisor, lsl #shift ; \
-  nop ; \
-  nop
+	subcs	dividend, dividend, divisor, lsl #shift
 #define ARM_MOD_BODY(dividend, divisor, order, spare)	 	  \
 	clz	order, divisor					; \
 	clz	spare, dividend					; \
 	sub	order, order, spare				; \
 	rsbs	order, order, #31				; \
-  sfi_new_bundle                ; \
-  add spare, pc, order, lsl #4  ; \
-  add spare, spare, #8          ; \
-  sfi_bxne spare                ; \
+	addne	pc, pc, order, lsl #3				; \
+	nop							; \
 	.set	shift, 32					; \
 	ARMV5_MOD_LOOP (dividend, divisor)			; \
 	ARMV5_MOD_LOOP (dividend, divisor)			; \
@@ -1034,7 +1014,6 @@ FUNC_START aeabi_uidivmod
 	bx	r3
 #else
 	stmfd	sp!, { r0, r1, lr }
-  sfi_call_preamble
 	bl	SYM(__udivsi3)
 	ldmfd	sp!, { r1, r2, lr }
 	mul	r3, r2, r0
@@ -1186,7 +1165,6 @@ FUNC_START aeabi_idivmod
 	bx	r3
 #else
 	stmfd	sp!, { r0, r1, lr }
-  sfi_call_preamble
 	bl	SYM(__divsi3)
 	ldmfd	sp!, { r1, r2, lr }
 	mul	r3, r2, r0
@@ -1288,12 +1266,8 @@ L10:	cmp	ip, #0
 
 	/* LLVM LOCAL mainline */
 	do_push	{r1, lr}
-#ifdef __native_client__
-	NACL_HALT
-#else
-	mov     r0, #SIGFPE
-	bl      SYM(raise) __PLT__
-#endif
+	mov	r0, #SIGFPE
+	bl	SYM(raise) __PLT__
 	/* APPLE LOCAL ARM MACH assembler */
 	RETLDM1 (r1)
 
@@ -1536,7 +1510,6 @@ L10:	cmp	ip, #0
 		
 /* Do not build the interworking functions when the target architecture does 
    not support Thumb instructions.  (This can be a multilib option).  */
-#if defined(__thumb__)
 #if defined __ARM_ARCH_4T__ || defined __ARM_ARCH_5T__\
       || defined __ARM_ARCH_5TE__ || defined __ARM_ARCH_5TEJ__ \
       || __ARM_ARCH__ >= 6
@@ -1715,7 +1688,6 @@ LSYM(Lchange_\register):
 /* APPLE LOCAL v7 support. Merge from mainline */
 #endif /* !__thumb2__ */
 #endif /* Arch supports thumb.  */
-#endif /* Thumb is enabled */
 
 #ifndef __symbian__
 #include "ieee754-df.S"

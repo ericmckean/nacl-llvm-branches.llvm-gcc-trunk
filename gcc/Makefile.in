@@ -605,7 +605,7 @@ GGC_LIB=
 
 # libgcc.a may be built directly or via stmp-multilib,
 # and installed likewise.  Overridden by t-fragment.
-LIBGCC = libgcc.a
+LIBGCC = libgcc.a  
 INSTALL_LIBGCC = install-libgcc
 
 # "true" if the target C library headers are unavailable; "false"
@@ -1684,7 +1684,7 @@ xlimits.h: glimits.h limitx.h limity.h
 #
 # Build libgcc.a.
 
-LIB2ADD = $(LIB2FUNCS_EXTRA) $(srcdir)/libgcc-memcpy.c
+LIB2ADD = $(LIB2FUNCS_EXTRA)
 LIB2ADD_ST = $(LIB2FUNCS_STATIC_EXTRA)
 
 # LLVM LOCAL begin libcc_kext
