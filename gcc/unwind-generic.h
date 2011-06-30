@@ -92,17 +92,6 @@ struct _Unwind_Exception
   _Unwind_Word private_1;
   _Unwind_Word private_2;
 
-  // @LOCALMOD-START
-  // some extra space to help with libgcc_eh on x86-64 which thinks this
-  // structure is bigger than what the bitcode thinks and hence
-  // when private_1/private_2 are written to they might write over
-  // the end of the struct into the exception which the bitcode places
-  // immediately after it
-  // c.f. http://code.google.com/p/nativeclient/issues/detail?id=1107
-  // An array of size 4 would likely suffice - 8 plays it safe
-  int _do_not_use[8];
-  // @LOCALMOD-END
-
   /* @@@ The IA-64 ABI says that this structure must be double-word aligned.
      Taking that literally does not make much sense generically.  Instead we
      provide the maximum alignment required by any type for the machine.  */
